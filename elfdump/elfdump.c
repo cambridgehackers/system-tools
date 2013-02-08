@@ -286,6 +286,24 @@ typedef struct {
     void     * * papSegment;
 } ElfFile;
 
+static int header_only = 0;
+static void memdump(unsigned char *p, int len, char *title)
+{
+int i;
+
+    i = 0;
+    while (len > 0) {
+		if ((i & 0xf) == 0) {
+	    	if (i > 0)
+				printf("\n");
+	    	printf("%s: ",title);
+		}
+		printf("%02x ", *p++);
+		i++;
+		len--;
+    }
+    printf("\n");
+}
 static void swap2(
     U8 * hword)
 {
@@ -448,6 +466,7 @@ static int iLoadElfFile(
         }
     }
 
+pszMsg = NULL;
     if ((pszMsg == NULL) &&
         (pElfFile->Ehdr.e_ident[EI_DATA] != BYTE_ORDER)) {
         SWAP4(&(pElfFile->Ehdr.e_entry));
@@ -955,12 +974,22 @@ static void vDumpElfFile(
             fprintf(stdout, ",INFO=%u",
                     pElfFile->paShdr[entry].sh_info);
         }
+        fprintf(stdout, " type %x size 0x%x", pElfFile->paShdr[entry].sh_type, pElfFile->paShdr[entry].sh_size);
         fputs("\n", stdout);
         if (pElfFile->paShdr[entry].sh_size == 0)
             continue;
         switch (pElfFile->paShdr[entry].sh_type) {
           case SHT_NOBITS:
+            printf ("SHT_NOBITS\n");
+            break;
           case SHT_STRTAB:
+            printf ("SHT_STRTAB\n");
+            printf("ptr %x len %x\n", pElfFile->papSection[entry], pElfFile->paShdr[entry].sh_size);
+            {
+            int i = pElfFile->paShdr[entry].sh_size;
+            if (i > 0x40) i = 0x40;
+            memdump(pElfFile->papSection[entry], i, "STRTAB");
+            }
             break;
           case SHT_REL:
             /* This avoids dumping .rel.stab */
@@ -986,6 +1015,16 @@ static void vDumpElfFile(
             break;
           case SHT_DYNSYM:
           case SHT_SYMTAB:
+if (header_only)
+            printf ("type %x, sec %x count %x sec %x hdr %x sec %x\n",
+                        pElfFile->Ehdr.e_type,
+                        pElfFile->papSection[entry],
+                        pElfFile->paShdr[entry].sh_size /
+                        pElfFile->paShdr[entry].sh_entsize,
+                        pElfFile->papSection[pElfFile->paShdr[entry].sh_link],
+                        pElfFile->paShdr,
+                        pElfFile->papSection[pElfFile->Ehdr.e_shstrndx]);
+else
             vDumpSymtab(pElfFile->Ehdr.e_type,
                         pElfFile->papSection[entry],
                         pElfFile->paShdr[entry].sh_size /
@@ -999,6 +1038,14 @@ static void vDumpElfFile(
                        pElfFile->paShdr[entry].sh_name, ".stab") == 0)
                 continue; /* .stab - needs special formatting */
           default:
+if (header_only)
+            printf ("sec %x, addr %x, size %x\n", 
+                          pElfFile->papSection[entry],
+                          (pElfFile->paShdr[entry].sh_addr != 0)
+                          ? pElfFile->paShdr[entry].sh_addr
+                          : pElfFile->paShdr[entry].sh_offset,
+                          pElfFile->paShdr[entry].sh_size);
+else
             vDumpProgbits(pElfFile->papSection[entry],
                           (pElfFile->paShdr[entry].sh_addr != 0)
                           ? pElfFile->paShdr[entry].sh_addr
@@ -1062,6 +1109,14 @@ int main(
     int     i;
     ElfFile elfFile;
 
+    while (argc > 2) {
+        printf ("arg %s\n", argv[1]);
+        if (!strcmp(argv[1], "-h")) {
+            header_only = 1;
+        }
+        argv++;
+        argc--;
+    }
     memset(&elfFile, 0, sizeof(elfFile));
     for (i = 1; i < argc; ++i)
         if (elfFile.pszPathName == NULL)
