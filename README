@@ -9,3 +9,14 @@ elfdump
  http://www.tachyonsoft.com/downloads/elfdump_linux.tar.gz
  (also referenced from http://www.tachyonsoft.com/elf.html)
 
+
+----------------------------------------------------------------------
+Other useful tools:
+
+1) mt-cross-tools
+    git clone git://gitorious.org/qt-raspberrypi/mt-cross-tools.git
+
+2) tiny-js
+    svn checkout http://tiny-js.googlecode.com/svn/trunk/ tiny-js-read-only
+    svn checkout http://tiny-js.googlecode.com/svn/branches/42tiny-js 42tiny-js
+
