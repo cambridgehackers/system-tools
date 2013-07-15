@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 
+#define DUMP_SIZE 64
 #define IMAGE_PHDR_OFFSET 0x09C    /* Start of partition headers */
 
 /* Attribute word defines */
@@ -43,41 +44,32 @@ typedef struct {
 } BootPartitionHeader;
 
 static int fd, end_of_file = 0;
+static unsigned char buffer[DUMP_SIZE];
 
-static unsigned int readbyte(int len)
+static void memdump(unsigned char *p, int len, char *title)
 {
-    unsigned int ret = 0;
-    while (len--) {
-        ret <<= 8;
-        if (read(fd, &ret, 1) != 1)
-            end_of_file = 1;
+int i;
+
+    i = 0;
+    while (len > 0) {
+        if (!(i & 0xf)) {
+            if (i > 0)
+                printf("\n");
+            printf("%s: ",title);
+        }
+        printf("%02x ", *p++);
+        i++;
+        len--;
     }
-    return ret;
-}
-
-static void do_indent(int aindent)
-{
-    while(aindent-- > 0)
-        printf ("  ");
-}
-
-static int get_block(int aindent)
-{
-    int orig_len = readbyte(4);
-    if (end_of_file)
-        return 0;
-    int block_type = readbyte(4);
-    int index = 0, linecount = 0, len = orig_len - 8;
-
-    return orig_len;
+    printf("\n");
 }
 
 int main(int argc, char *argv[])
 {
-    BootPartitionHeader part_data;
+    BootPartitionHeader part_data[20], *ppart = part_data;
 
     if (argc != 2 || (fd = open (argv[1], O_RDONLY)) < 0) {
-        printf ("dumpmp4 <filename>\n");
+        printf ("xbootbin <filename>\n");
         exit(-1);
     }
     lseek(fd, IMAGE_PHDR_OFFSET, SEEK_SET);
@@ -86,18 +78,25 @@ int main(int argc, char *argv[])
 printf("[%s:%d] off %x\n", __FUNCTION__, __LINE__, part_offset);
     lseek(fd, part_offset, SEEK_SET);
     while (!end_of_file) {
-        read(fd, &part_data, sizeof(part_data));
-        if (part_data.ImageWordLen == 0)
+        read(fd, ppart, sizeof(*ppart));
+        if (ppart->CheckSum == 0xffffffff)
             break;
-        printf("    ImageWordLen: %8x; ", part_data.ImageWordLen);
-        printf("DataWordLen: %8x; ", part_data.DataWordLen);
-        printf("PartitionWordLen: %8x\n", part_data.PartitionWordLen);
-        printf("        LoadAddr: %8x; ", part_data.LoadAddr);
-        printf("ExecAddr:    %8x; ", part_data.ExecAddr);
-        printf("PartitionStart:   %8x\n", part_data.PartitionStart);
-        printf("        PartitionAttr: %3x; ", part_data.PartitionAttr);
-        printf("SectionCount: %7x\n", part_data.SectionCount);
-        //get_block(0);
+        ppart++;
+    }
+    int pindex = 0;
+    while (&part_data[pindex] != ppart) {
+        printf("    ImageWordLen: %8d; ", part_data[pindex].ImageWordLen << 2);
+        printf("DataWordLen: %8d; ", part_data[pindex].DataWordLen << 2);
+        printf("PartitionWordLen: %8d\n", part_data[pindex].PartitionWordLen << 2);
+        printf("        LoadAddr: %8x; ", part_data[pindex].LoadAddr);
+        printf("ExecAddr:    %8x; ", part_data[pindex].ExecAddr);
+        printf("PartitionStart:   %8x\n", part_data[pindex].PartitionStart << 2);
+        printf("        PartitionAttr: %3x; ", part_data[pindex].PartitionAttr);
+        printf("SectionCount: %7x\n", part_data[pindex].SectionCount);
+        lseek(fd, part_data[pindex].PartitionStart << 2, SEEK_SET);
+        int rlen = read(fd, buffer, sizeof(buffer));
+        memdump(buffer, rlen, "DATA");
+        pindex++;
     }
     return 0;
 }
