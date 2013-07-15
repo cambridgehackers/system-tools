@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <endian.h>
 
 #ifdef _WIN32
 #define I64 __int64
@@ -271,12 +270,10 @@ typedef struct {
 } Elf32_Note;
 
 #undef BYTE_ORDER
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(_WIN32) || defined(__i386)
 #define BYTE_ORDER ELFDATALSB
-#elif __BYTE_ORDER == __BIG_ENDIAN
-#define BYTE_ORDER ELFDATAMSB
 #else
-#error No byte order detected!
+#define BYTE_ORDER ELFDATAMSB
 #endif
 
 typedef struct {
@@ -396,7 +393,7 @@ static const char * pszReadElfFile(
 {
     if (fread(buffer, size, count, pElfFile->pFile) != count) {
         if (feof(pElfFile->pFile))
-            return "Invalid ELF file read";
+            return "Invalid ELF file";
         return strerror(errno);
     }
     return NULL;
@@ -423,7 +420,7 @@ static int iLoadElfFile(
             (pElfFile->Ehdr.e_ident[EI_MAG2] != ELFMAG2) ||
             (pElfFile->Ehdr.e_ident[EI_MAG3] != ELFMAG3) ||
             (pElfFile->Ehdr.e_ident[EI_VERSION] != EV_CURRENT)) {
-            pszMsg = "Invalid ELF file magic";
+            pszMsg = "Invalid ELF file";
         }
     }
     if (pszMsg == NULL) {
