@@ -25,12 +25,44 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <endian.h>
 
 #define BUFFER_SIZE 1024
 
-/* Attribute word defines */
-//ATTRIBUTE_PS_IMAGE_MASK        = 0x10    /**< Code partition */
-//ATTRIBUTE_PL_IMAGE_MASK        = 0x20    /**< Bit stream partition */
+/************ elf header structures ****************/
+typedef struct {
+    unsigned char e_ident[16];
+    uint16_t  e_type;
+#define ET_EXEC 2
+    uint16_t  e_machine;
+    uint32_t  e_version;
+    uint32_t  e_entry;
+    uint32_t  e_phoff;
+    uint32_t  e_shoff;
+    uint32_t  e_flags;
+    uint16_t  e_ehsize;
+    uint16_t  e_phentsize;
+    uint16_t  e_phnum;
+    uint16_t  e_shentsize;
+    uint16_t  e_shnum;
+    uint16_t  e_shstrndx;
+} elf_header;
+
+enum{PT_NULL, PT_LOAD, PT_DYNAMIC, PT_INTERP, PT_NOTE, PT_SHLIB, PT_PHDR};
+typedef struct {
+    uint32_t  p_type;
+    uint32_t  p_offset;
+    uint32_t  p_vaddr;
+    uint32_t  p_paddr;
+    uint32_t  p_filesz;
+    uint32_t  p_memsz;
+    uint32_t  p_flags;
+    uint32_t  p_align;
+} program_header;
+
+/************ boot.bin header structures ****************/
+#define ATTRIBUTE_PS_IMAGE_MASK  0x10    /**< Code partition */
+#define ATTRIBUTE_PL_IMAGE_MASK  0x20    /**< Bit stream partition */
 typedef struct {
     uint32_t Version;
     uint32_t ImageCount;
@@ -54,72 +86,100 @@ typedef struct {
     uint32_t partition;
     uint32_t count;
     uint32_t name_length;
-    //uint32_t name;
 } ImageHeader;
 
-static int fdfsbl, fdcomposite, fdoutfile, end_of_file = 0;
-static unsigned char buffer[BUFFER_SIZE];
-ImageHeaderTable imagetab = {
-    0x1010000, 3, 0x260, 0x240};
-BootPartitionHeader partinit = {0xaabbccdd};
-BootPartitionHeader zpartinit;
+static int fdinput[2], fdoutfile, end_of_file = 0;
 
-static void memdump(unsigned char *p, int len, char *title)
+static program_header  *progh[2];
+static elf_header       elfh[2];
+static unsigned char    buffer[BUFFER_SIZE];
+static ImageHeaderTable imagetab = {0x1010000, 0, 0x260, 0x240};
+static BootPartitionHeader partinit[10];
+
+static void fill_file(int i)
 {
-int i;
-
-    i = 0;
-    while (len > 0) {
-        if (!(i & 0xf)) {
-            if (i > 0)
-                printf("\n");
-            printf("%s: ",title);
-        }
-        printf("%02x ", *p++);
-        i++;
-        len--;
-    }
-    printf("\n");
+    static unsigned char fillbyte = 0xff;
+    while(i-- > 0)
+        write(fdoutfile, &fillbyte, sizeof(fillbyte));
 }
 
 int main(int argc, char *argv[])
 {
     BootPartitionHeader part_data[20], *ppart = part_data;
-    int i;
+    int i, index, j, entry;
+    uint32_t fsbllen = 0;
+    int partstart = 0x2a0;
 
-printf("argc %d a %s a %s\n", argc, argv[1], argv[2]);
     if (argc != 3
-     || (fdfsbl = open (argv[1], O_RDONLY)) < 0
-     || (fdcomposite = open (argv[2], O_RDONLY)) < 0
+     || (fdinput[0] = open (argv[1], O_RDONLY)) < 0
+     || (fdinput[1] = open (argv[2], O_RDONLY)) < 0
      || (fdoutfile = creat ("boot.tmp", 0666)) < 0) {
         printf ("xbootgen <fsbl> <composite>\n");
         exit(-1);
     }
-    lseek(fdfsbl, 0, SEEK_SET);
-    lseek(fdcomposite, 0, SEEK_SET);
     int tmpfd = open ("d.tmp", O_RDONLY);
-    int j;
     int len = read(tmpfd, buffer, sizeof(buffer));
-    unsigned char fillbyte = 0xff;
-    struct {
-        uint32_t address;
-        uint32_t value;
-    } reginit = {0xffffffff, 0};
-
+    close(tmpfd);
     write(fdoutfile, buffer, len);
-    for(i = 0; i < 256; i++)
+    for(i = 0; i < 256; i++) {
+        struct {
+            uint32_t address;
+            uint32_t value;
+        } reginit = {0xffffffff, 0};
         write(fdoutfile, &reginit, sizeof(reginit));
-    i = 32;
-    while(i-- > 0)
-        write(fdoutfile, &fillbyte, sizeof(fillbyte));
+    }
+    fill_file(32);
 
+    for (index = 0; index < 2; index++) {
+        int startsect = imagetab.ImageCount;
+        if(read(fdinput[index], &(elfh[index]), sizeof(elfh[index])) != sizeof(elfh[index])) {
+            printf("[%s:%d] error in read\n", __FUNCTION__, __LINE__);
+        }
+        if (elfh[index].e_ident[0] != 0x7f || elfh[index].e_ident[1] != 'E' || elfh[index].e_ident[2] != 'L'
+         || elfh[index].e_ident[3] != 'F' || elfh[index].e_ident[6] != 1
+         || elfh[index].e_type != ET_EXEC || elfh[index].e_ident[4] != 1) {
+            printf("Error: input file not valid\n");
+        }
+        if (elfh[index].e_phnum != 0) {
+            if (lseek(fdinput[index], elfh[index].e_phoff, SEEK_SET) == -1) {
+                fprintf(stderr, "Error seeking to offset\n");
+                return 1;
+            }
+            progh[index] = malloc(elfh[index].e_phentsize * elfh[index].e_phnum);
+            if(read(fdinput[index], progh[index], elfh[index].e_phentsize * elfh[index].e_phnum) != (elfh[index].e_phentsize * elfh[index].e_phnum)) {
+                printf("[%s:%d] error in read\n", __FUNCTION__, __LINE__);
+            }
+            uint32_t enaddr = elfh[index].e_entry;
+            for (entry = 0; entry < elfh[index].e_phnum; ++entry)
+                if (progh[index][entry].p_filesz) {
+                    uint32_t datalen = progh[index][entry].p_filesz;
+                    if (index == 0)
+                        fsbllen = datalen;
+                    datalen /= 4;
+                    partinit[imagetab.ImageCount].ImageWordLen = datalen;
+                    partinit[imagetab.ImageCount].DataWordLen = datalen;
+                    partinit[imagetab.ImageCount].PartitionWordLen = datalen;
+                    partinit[imagetab.ImageCount].LoadAddr = progh[index][entry].p_paddr;
+                    partinit[imagetab.ImageCount].ExecAddr = enaddr;
+                    partinit[imagetab.ImageCount].PartitionStart = partstart;
+                    partinit[imagetab.ImageCount].PartitionAttr = ATTRIBUTE_PS_IMAGE_MASK;
+                    partinit[imagetab.ImageCount].SectionCount = 0;
+                    partinit[imagetab.ImageCount].Pads[1] = 0x240 + startsect * 0x10;
+                    partinit[startsect].SectionCount++;
+                    imagetab.ImageCount++;
+                    enaddr = 0;
+                    int fsize = datalen & 0x3f;
+                    if (fsize)
+                        datalen += (0x40 - fsize);
+                    partstart += datalen;
+                }
+        }
+    }
     write(fdoutfile, &imagetab, sizeof(imagetab));
-    i = 64 - sizeof(imagetab);
-    while(i-- > 0)
-        write(fdoutfile, &fillbyte, sizeof(fillbyte));
+    fill_file(64 - sizeof(imagetab));
 
     int tnext = 0x250;
-    for (i = 0; i < 2; i++) {
+    for (index = 0; index < 2; index++) {
         ImageHeader imagehead;
         union {
             char c[200];
@@ -127,72 +187,58 @@ printf("argc %d a %s a %s\n", argc, argv[1], argv[2]);
         } nametemp;
 
         memset(&nametemp, 0, sizeof(nametemp));
-        strcpy(nametemp.c, argv[1+i]);
+        strcpy(nametemp.c, argv[1+index]);
         imagehead.next = tnext;
         tnext = 0;
-        imagehead.partition = 0x260 + i * 0x10;
+        imagehead.partition = 0x260 + index * 0x10;
         imagehead.count = 0;
-        imagehead.name_length = i + 1; /* value of actual partition count */
-        printf("NAMELEN %d\n", imagehead.name_length);
+        imagehead.name_length = index + 1; /* value of actual partition count */
         write(fdoutfile, &imagehead, sizeof(imagehead));
         int wordlen = (strlen(nametemp.c) + 7)/4;
         for (j = 0; j < wordlen; j++) {
             nametemp.i[j] = ntohl(nametemp.i[j]);
             write(fdoutfile, &nametemp.i[j], sizeof(nametemp.i[j]));
         }
-        j = 64 - sizeof(imagehead) - wordlen * 4;
-        while(j-- > 0)
-            write(fdoutfile, &fillbyte, sizeof(fillbyte));
+        fill_file(64 - sizeof(imagehead) - wordlen * 4);
     }
-    for (i = 0; i < imagetab.ImageCount; i++) {
-        partinit.ImageWordLen = 0x55b9;
-        partinit.DataWordLen = 0x55b9;
-        partinit.PartitionWordLen = 0x55b9;
-        partinit.LoadAddr = 0;
-        partinit.ExecAddr = 0;
-        partinit.PartitionStart = 0x2a0;
-        partinit.PartitionAttr = 0x10;
-        partinit.SectionCount = 1;
-        partinit.CheckSum = 0xfffef9e3;
-        partinit.Pads[1] = 0x240 + i * 0x10;
-        write(fdoutfile, &partinit, sizeof(partinit));
-    }
-    /* last partition entry is all '0' */
-    zpartinit.CheckSum = 0xffffffff;
-    write(fdoutfile, &zpartinit, sizeof(zpartinit));
 
-    uint32_t totalsize = 0x156e4;
+    /* last partition entry is all '0' */
+    for (i = 0; i <= imagetab.ImageCount; i++) {
+        uint32_t checksum = 0, *pdata = (uint32_t *)&partinit[i];
+        for (j = 0; j < 15; j++)
+             checksum += *pdata++;
+        partinit[i].CheckSum = ~checksum;
+    }
+    write(fdoutfile, &partinit, sizeof(partinit[0]) * (imagetab.ImageCount+1));
+    int fillsize = 0;
+    for (index = 0; index < 2; index++) {
+        if (progh[index]) {
+            fill_file(fillsize);
+            for (entry = 0; entry < elfh[index].e_phnum; ++entry)
+                if (progh[index][entry].p_filesz) {
+                    lseek(fdinput[index], progh[index][entry].p_offset, SEEK_SET);
+                    fillsize += progh[index][entry].p_filesz;
+                    uint32_t readlen = progh[index][entry].p_filesz;
+                    while (readlen > 0) {
+                        int readitem = readlen;
+                        if (readitem > sizeof(buffer))
+                            readitem = sizeof(buffer);
+                        int len = read(fdinput[index], buffer, readitem);
+                        if (len != readitem)
+                            printf("tried to read file %d length %d actual %d\n", index, readitem, len);
+                        write(fdoutfile, buffer, len);
+                        readlen -= len;
+                    }
+                }
+        }
+        fillsize &= 63;
+        if (fillsize)
+            fillsize = 64 - fillsize;
+    }
     lseek(fdoutfile, 0x34, SEEK_SET);
-    write(fdoutfile, &totalsize, sizeof(totalsize));
+    write(fdoutfile, &fsbllen, sizeof(fsbllen));
     lseek(fdoutfile, 0x40, SEEK_SET);
-    write(fdoutfile, &totalsize, sizeof(totalsize));
+    write(fdoutfile, &fsbllen, sizeof(fsbllen));
     close(fdoutfile);
-//#define IMAGE_PHDR_OFFSET 0x09C    /* Start of partition headers */
-//    lseek(fd, IMAGE_PHDR_OFFSET, SEEK_SET);
-//    uint32_t part_offset;
-//    read(fd, &part_offset, sizeof(part_offset));
-//printf("[%s:%d] off %x\n", __FUNCTION__, __LINE__, part_offset);
-//    lseek(fd, part_offset, SEEK_SET);
-//    while (!end_of_file) {
-//        read(fd, ppart, sizeof(*ppart));
-//        if (ppart->CheckSum == 0xffffffff)
-//            break;
-//        ppart++;
-//    }
-//    int pindex = 0;
-//    while (&part_data[pindex] != ppart) {
-//        printf("    ImageWordLen: %8d; ", part_data[pindex].ImageWordLen << 2);
-//        printf("DataWordLen: %8d; ", part_data[pindex].DataWordLen << 2);
-//        printf("PartitionWordLen: %8d\n", part_data[pindex].PartitionWordLen << 2);
-//        printf("        LoadAddr: %8x; ", part_data[pindex].LoadAddr);
-//        printf("ExecAddr:    %8x; ", part_data[pindex].ExecAddr);
-//        printf("PartitionStart:   %8x\n", part_data[pindex].PartitionStart << 2);
-//        printf("        PartitionAttr: %3x; ", part_data[pindex].PartitionAttr);
-//        printf("SectionCount: %7x\n", part_data[pindex].SectionCount);
-//        lseek(fd, part_data[pindex].PartitionStart << 2, SEEK_SET);
-//        int rlen = read(fd, buffer, sizeof(buffer));
-//        memdump(buffer, rlen, "DATA");
-//        pindex++;
-//    }
     return 0;
 }
