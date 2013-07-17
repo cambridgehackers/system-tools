@@ -96,22 +96,29 @@ static unsigned char    buffer[BUFFER_SIZE];
 static ImageHeaderTable imagetab = {0x1010000};
 static BootPartitionHeader partinit[10];
 
-static void fill_file(int i)
+static void fill_file(void)
 {
+    int filllen = 0x40 - (lseek(fdoutfile, 0, SEEK_CUR) & 0x3f);
+    if (filllen == 0x40)
+        return;
     static unsigned char fillbyte = 0xff;
-    while(i-- > 0)
+    while(filllen-- > 0)
         write(fdoutfile, &fillbyte, sizeof(fillbyte));
 }
 
+#define PARTITION_HEADER_TABLE 0x980
+static uint32_t boot_rom_header[32] = {
+        /* From TRM, Chapter 6: Boot and Configuration */
+	0xaa995566,
+	0x584c4e58,
+	0,
+	0x1010000,
+};
 int main(int argc, char *argv[])
 {
     BootPartitionHeader part_data[20], *ppart = part_data;
     int i, index, j, entry;
-    uint32_t fsbllen = 0;
-    int partstart = 0x2a0;
 
-    imagetab.ImageOffset = 0x240;
-    imagetab.PartitionOffset = 0x260;
     if (argc != 3
      || (fdinput[0] = open (argv[1], O_RDONLY)) < 0
      || (fdinput[1] = open (argv[2], O_RDONLY)) < 0
@@ -123,6 +130,8 @@ int main(int argc, char *argv[])
     int len = read(tmpfd, buffer, sizeof(buffer));
     close(tmpfd);
     write(fdoutfile, buffer, len);
+    int rom_header_offset = lseek(fdoutfile, 0, SEEK_CUR);
+    write(fdoutfile, boot_rom_header, sizeof(boot_rom_header));
     for(i = 0; i < 256; i++) {
         struct {
             uint32_t address;
@@ -130,8 +139,9 @@ int main(int argc, char *argv[])
         } reginit = {0xffffffff, 0};
         write(fdoutfile, &reginit, sizeof(reginit));
     }
-    fill_file(32);
+    fill_file();
 
+    int partstart = 0x2a0;
     for (index = 0; index < 2; index++) {
         int startsect = imagetab.ImageCount;
         if(read(fdinput[index], &(elfh[index]), sizeof(elfh[index])) != sizeof(elfh[index])) {
@@ -155,8 +165,10 @@ int main(int argc, char *argv[])
             for (entry = 0; entry < elfh[index].e_phnum; ++entry)
                 if (progh[index][entry].p_filesz) {
                     uint32_t datalen = progh[index][entry].p_filesz;
-                    if (index == 0)
-                        fsbllen = datalen;
+                    if (index == 0) {
+                        boot_rom_header[5] = datalen;
+                        boot_rom_header[8] = datalen;
+                    }
                     datalen /= 4;
                     partinit[imagetab.ImageCount].ImageWordLen = datalen;
                     partinit[imagetab.ImageCount].DataWordLen = datalen;
@@ -166,7 +178,7 @@ int main(int argc, char *argv[])
                     partinit[imagetab.ImageCount].PartitionStart = partstart;
                     partinit[imagetab.ImageCount].PartitionAttr = ATTRIBUTE_PS_IMAGE_MASK;
                     partinit[imagetab.ImageCount].SectionCount = 0;
-                    partinit[imagetab.ImageCount].Pads[1] = imagetab.ImageOffset + startsect * sizeof(partinit[0])/4;
+                    partinit[imagetab.ImageCount].Pads[1] = startsect * sizeof(partinit[0])/4;
                     partinit[startsect].SectionCount++;
                     imagetab.ImageCount++;
                     enaddr = 0;
@@ -177,12 +189,16 @@ int main(int argc, char *argv[])
                 }
         }
     }
+    int toff;
+    int imagetab_offset = lseek(fdoutfile, 0, SEEK_CUR);
+    boot_rom_header[30] = imagetab_offset;
     write(fdoutfile, &imagetab, sizeof(imagetab));
-    fill_file(64 - sizeof(imagetab));
+    fill_file();
 
+    imagetab.ImageOffset = lseek(fdoutfile, 0, SEEK_CUR)/4;
     int tnext = lseek(fdoutfile, 0, SEEK_CUR);
+    ImageHeader imagehead[2];
     for (index = 0; index < 2; index++) {
-        ImageHeader imagehead;
         union {
             char c[200];
             uint32_t i[50];
@@ -191,38 +207,47 @@ int main(int argc, char *argv[])
         memset(&nametemp, 0, sizeof(nametemp));
         strcpy(nametemp.c, argv[1+index]);
         int wordlen = (strlen(nametemp.c) + 7)/4;
-        tnext += sizeof(imagehead) + wordlen * 4 + (64 - sizeof(imagehead) - wordlen * 4);
+        tnext += sizeof(imagehead[index]) + wordlen * 4 + (64 - sizeof(imagehead[index]) - wordlen * 4);
         if (index != 0)
             tnext = 0;
-        imagehead.next = tnext/4;
-        imagehead.partition = imagetab.PartitionOffset + index * sizeof(partinit[0])/4;
-        imagehead.count = 0;
-        imagehead.name_length = index + 1; /* value of actual partition count */
-        write(fdoutfile, &imagehead, sizeof(imagehead));
+        imagehead[index].next = tnext/4;
+printf("[%s:%d] tnext %x\n", __FUNCTION__, __LINE__, tnext/4);
+        imagehead[index].partition = 0x260 + index * sizeof(partinit[0])/4;
+        imagehead[index].count = 0;
+        imagehead[index].name_length = index + 1; /* value of actual partition count */
+toff = lseek(fdoutfile, 0, SEEK_CUR)/4;
+printf("[%s:%d] 240/250 toff %x\n", __FUNCTION__, __LINE__, toff);
+        write(fdoutfile, &imagehead[index], sizeof(imagehead[index]));
         for (j = 0; j < wordlen; j++) {
             nametemp.i[j] = ntohl(nametemp.i[j]);
             write(fdoutfile, &nametemp.i[j], sizeof(nametemp.i[j]));
         }
-        fill_file(64 - sizeof(imagehead) - wordlen * 4);
+        fill_file();
     }
 
     /* last partition entry is all '0' */
     for (i = 0; i <= imagetab.ImageCount; i++) {
+        if (i != imagetab.ImageCount)
+            partinit[i].Pads[1] += imagetab.ImageOffset;
         uint32_t checksum = 0, *pdata = (uint32_t *)&partinit[i];
         for (j = 0; j < 15; j++)
              checksum += *pdata++;
         partinit[i].CheckSum = ~checksum;
     }
+    boot_rom_header[31] = lseek(fdoutfile, 0, SEEK_CUR);
+printf("[%s:%d] 260 toff %x\n", __FUNCTION__, __LINE__, boot_rom_header[31]);
+    imagetab.PartitionOffset = boot_rom_header[31]/4;
     write(fdoutfile, &partinit, sizeof(partinit[0]) * (imagetab.ImageCount+1));
-    int fillsize = 0;
-    for (index = 0; index < 2; index++) {
+    boot_rom_header[4] = lseek(fdoutfile, 0, SEEK_CUR);
+    for (index = 0; index < 2; index++)
         if (progh[index]) {
-            fill_file(fillsize);
+            fill_file();
             for (entry = 0; entry < elfh[index].e_phnum; ++entry)
                 if (progh[index][entry].p_filesz) {
                     lseek(fdinput[index], progh[index][entry].p_offset, SEEK_SET);
-                    fillsize += progh[index][entry].p_filesz;
                     uint32_t readlen = progh[index][entry].p_filesz;
+    toff = lseek(fdoutfile, 0, SEEK_CUR);
+printf("[%s:%d] 2a0/etc datttt toff %x\n", __FUNCTION__, __LINE__, toff/4);
                     while (readlen > 0) {
                         int readitem = readlen;
                         if (readitem > sizeof(buffer))
@@ -235,14 +260,14 @@ int main(int argc, char *argv[])
                     }
                 }
         }
-        fillsize &= 63;
-        if (fillsize)
-            fillsize = 64 - fillsize;
-    }
-    lseek(fdoutfile, 0x34, SEEK_SET);
-    write(fdoutfile, &fsbllen, sizeof(fsbllen));
-    lseek(fdoutfile, 0x40, SEEK_SET);
-    write(fdoutfile, &fsbllen, sizeof(fsbllen));
+    boot_rom_header[9] = 1;
+    for (index = 0; index < 10; index++)
+         boot_rom_header[10] += boot_rom_header[index];
+    boot_rom_header[10] = ~boot_rom_header[10];
+    lseek(fdoutfile, imagetab_offset, SEEK_SET);
+    write(fdoutfile, &imagetab, sizeof(imagetab));
+    lseek(fdoutfile, rom_header_offset, SEEK_SET);
+    write(fdoutfile, boot_rom_header, sizeof(boot_rom_header));
     close(fdoutfile);
     return 0;
 }

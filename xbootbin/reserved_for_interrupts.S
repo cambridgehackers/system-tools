@@ -20,9 +20,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-IMAGE_HEADER_TABLE     = 0x8c0
-PARTITION_HEADER_TABLE = 0x980
-DATA_AREA_START        = 0xa80
 	.arm
 	.data
 1:
@@ -41,25 +38,3 @@ DATA_AREA_START        = 0xa80
 	b 1b
 1:
 	b 1b
-        /* From TRM, Chapter 6: Boot and Configuration */
-	.word 0xaa995566
-	.word 0x584c4e58
-	.word 0
-	.word 0x1010000
-
-	.word DATA_AREA_START
-	.word 0       /* fill in with size later */
-	.word 0
-	.word 0
-	.word 0       /* fill in with size later */
-	.word 1
-	.word 0xfc16a3f8
-	.word 0
-	.word 0, 0, 0, 0
-	.word 0, 0, 0, 0
-	.word 0, 0, 0, 0
-	.word 0, 0, 0, 0
-	.word 0
-	.word 0
-	.word IMAGE_HEADER_TABLE
-	.word PARTITION_HEADER_TABLE
