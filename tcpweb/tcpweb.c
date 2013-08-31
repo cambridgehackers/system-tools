@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -49,7 +50,7 @@ int i = 0;
     }
     printf("\n");
 }
-int get_fd(int sockfd)
+static int get_fd(int sockfd)
 {
 int i;
 
@@ -69,7 +70,7 @@ int i;
     return i;
 }
 
-char resp[] = 
+static char resp[] = 
     "HTTP/1.0 200 OK\r\n"
     "Server: hacko/0.6 Python/2.6.1\r\n"
     "Date: Fri, 23 Aug 2013 03:28:48 GMT\r\n"
@@ -77,7 +78,79 @@ char resp[] =
     "Content-Length: %d\r\n"
     "Last-Modified: Sat, 06 Jul 2013 22:43:14 GMT\r\n"
     "\r\n";
-char cdata[2041];
+static char cdata[2041];
+
+static int tohex(int val)
+{
+    if (val >= '0' && val <= '9')
+        return val - '0';
+    else if (val >= 'A' && val <= 'F')
+        return val - 'A' + 10;
+    else if (val >= 'a' && val <= 'f')
+        return val - 'a' + 10;
+    else
+        printf("Error: bad hex character %x\n", val);
+    return 0;
+}
+static void unhex(char *pvalue)
+{
+    char *ptarget = pvalue;
+    while (*pvalue) {
+        char ch = *pvalue++;
+        if (ch == '%') {
+            ch = *pvalue++;
+            ch = tohex(ch) << 4 | tohex(*pvalue++);
+        }
+        *ptarget++ = ch;
+    }
+    *ptarget = 0;
+}
+static void storedata(char *pvalue)
+{
+    unhex(pvalue);
+    char *pname = index(pvalue, '&'), *temp;
+    char namebuffer[1000];
+    if (pname) {
+        *pname++ = 0;
+        if (!strncmp(pvalue, "r=", 2)) {
+            temp = pname;
+            pname = pvalue;
+            pvalue = temp;
+        }
+        printf("name %s\nvalue %s\n", pname, pvalue);
+        sprintf(namebuffer, "data/%s", pname+2);
+        int fd = creat(namebuffer, 0600);
+        if (fd >= 0) {
+            write(fd, pvalue+2, strlen(pvalue+2));
+            close(fd);
+        }
+    }
+}
+
+static void getdata(char *pvalue)
+{
+    unhex(pvalue);
+    char *pname = strstr(pvalue, "?get=");
+    char namebuffer[1000];
+
+    memset(cdata, 'A', sizeof(cdata));
+    cdata[sizeof(cdata)-1] = 0;
+    if (pname) {
+        pname += 5;
+        pvalue = index(pname, ' ');
+        if (pvalue) {
+            *pvalue-- = 0;
+            printf("getdata '%s'\n", pname);
+            sprintf(namebuffer, "data/%s", pname);
+            int fd = open(namebuffer, O_RDONLY);
+            if (fd >= 0) {
+                int len = read(fd, cdata, sizeof(cdata)-1);
+                cdata[len] = 0;
+                close(fd);
+            }
+        }
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -87,7 +160,6 @@ int main(int argc, char *argv[])
 	    printf("tcpweb <portnumber>\n");
 	    exit(1);
 	}
-	memset(cdata, 'A', sizeof(cdata));
         lport = (++argv)[0];                     /**** parse mapping specification */
         tindex = get_fd(0);                      /**** get listening socket */
         memset(&dest_addr[tindex], 0, sizeof(dest_addr[tindex]));
@@ -115,7 +187,6 @@ int main(int argc, char *argv[])
             if(!pollstr[tindex].revents)
                 continue;
             npoll--;
-printf("[%s:%d] tindex %d other %d fd %d\n", __FUNCTION__, __LINE__, tindex, otherfd[tindex], pollstr[tindex].fd);
             if (!otherfd[tindex]) {             /**** new connection request arrived */
                 int i;
                 struct sockaddr_in client;
@@ -125,20 +196,23 @@ printf("[%s:%d] tindex %d other %d fd %d\n", __FUNCTION__, __LINE__, tindex, oth
                     perror("accept");
                     exit(1);
                 }
-printf("[%s:%d] other %d\n", __FUNCTION__, __LINE__, i);
                 otherfd[i] = 1000;
             }
             else {
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
                 if ((read_len = read(pollstr[tindex].fd, temp_buf, sizeof(temp_buf))) <= 0) {
                     }
                 else {
                     temp_buf[read_len] = 0;
                     //memdump(temp_buf, read_len, "RX");
                     printf("INCOMING: %s\n", temp_buf);
-                    sprintf(temp_buf, resp, sizeof(cdata));
+                    char *pp = strstr(temp_buf, "\r\n\r\n");
+                    if (pp && *(pp+4))
+                        storedata(pp + 4);
+                    else
+                        getdata(temp_buf);
+                    sprintf(temp_buf, resp, strlen(cdata));
                     write(pollstr[tindex].fd, temp_buf, strlen(temp_buf));
-                    write(pollstr[tindex].fd, cdata, sizeof(cdata));
+                    write(pollstr[tindex].fd, cdata, strlen(cdata));
                 };
                 shutdown(pollstr[tindex].fd, SHUT_RDWR);
                 close(pollstr[tindex].fd);
