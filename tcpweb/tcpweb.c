@@ -27,29 +27,22 @@
 #include <arpa/inet.h>
 #include <sys/poll.h>
 
-#define MAX_POLL	100
-#define POLL_TIMEOUT	20 /* milliseconds */
+#define MAX_POLL    100
+#define POLL_TIMEOUT    20 /* milliseconds */
 static char temp_buf[4096];
 static struct pollfd pollstr[MAX_POLL];
 static int otherfd[MAX_POLL];
-static struct sockaddr_in dest_addr[MAX_POLL];
 
-static void memdump(unsigned char *p, int len, char *title)
-{
-int i = 0;
+static char resp[] =
+    "HTTP/1.0 200 OK\r\n"
+    "Server: hacko/0.6 Python/2.6.1\r\n"
+    "Date: Fri, 23 Aug 2013 03:28:48 GMT\r\n"
+    "Content-type: application/octet-stream\r\n"
+    "Content-Length: %d\r\n"
+    "Last-Modified: Sat, 06 Jul 2013 22:43:14 GMT\r\n"
+    "\r\n";
+static char cdata[2041];
 
-    while (len > 0) {
-        if ((i & 0xf) == 0) {
-                if (i > 0)
-                printf("\n");
-                printf("%s: ",title);
-        }
-        printf("%02x ", *p++);
-        i++;
-        len--;
-    }
-    printf("\n");
-}
 static int get_fd(int sockfd)
 {
 int i;
@@ -60,7 +53,7 @@ int i;
     }
     for (i = 0; i < MAX_POLL; i++)
         if (!pollstr[i].events)
-		break;
+            break;
     if (i == MAX_POLL) {
         printf ("error no sock\n");
         exit(-1);
@@ -69,16 +62,6 @@ int i;
     pollstr[i].events = POLLIN;
     return i;
 }
-
-static char resp[] = 
-    "HTTP/1.0 200 OK\r\n"
-    "Server: hacko/0.6 Python/2.6.1\r\n"
-    "Date: Fri, 23 Aug 2013 03:28:48 GMT\r\n"
-    "Content-type: application/octet-stream\r\n"
-    "Content-Length: %d\r\n"
-    "Last-Modified: Sat, 06 Jul 2013 22:43:14 GMT\r\n"
-    "\r\n";
-static char cdata[2041];
 
 static int tohex(int val)
 {
@@ -154,74 +137,60 @@ static void getdata(char *pvalue)
 
 int main(int argc, char *argv[])
 {
-        int tindex, sockopt = 1; /* allow reuse of port number */
-        static char *lport;
-	if (argc != 2) {
-	    printf("tcpweb <portnumber>\n");
-	    exit(1);
-	}
-        lport = (++argv)[0];                     /**** parse mapping specification */
-        tindex = get_fd(0);                      /**** get listening socket */
-        memset(&dest_addr[tindex], 0, sizeof(dest_addr[tindex]));
-        dest_addr[tindex].sin_family = AF_INET;
-        dest_addr[tindex].sin_port = htons(atol(lport));
-        dest_addr[tindex].sin_addr.s_addr = htonl(INADDR_ANY);
-        if (setsockopt(pollstr[tindex].fd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt)) < 0) 
-            perror ("cannot set socket to reuse address\n"); /* not fatal */
-        if (bind(pollstr[tindex].fd, (struct sockaddr *)&dest_addr[tindex], sizeof(dest_addr[tindex])) < 0) {
-            perror("bind");
-            exit(1);
-        }
-        if (listen(pollstr[tindex].fd, 10) < 0) {
-            perror("listen");
-            exit(1);
-        }
-    while (1) {                                   /**** main event loop */
-        int npoll, tindex;
-        if ((npoll = poll(pollstr, MAX_POLL, POLL_TIMEOUT)) < 0) {
-            printf ("poll\n");
-            break;
-        }
+    int read_len, npoll, sockopt = 1;
+    struct sockaddr_in sockaddr;
+    if (argc != 2) {
+        printf("tcpweb <portnumber>\n");
+        exit(1);
+    }
+    int tindex = get_fd(0);             /**** get listening socket */
+    memset(&sockaddr, 0, sizeof(sockaddr));
+    sockaddr.sin_family = AF_INET;
+    sockaddr.sin_port = htons(atol(argv[1]));
+    sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (setsockopt(pollstr[tindex].fd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt)) < 0)
+        perror ("cannot set socket to reuse address\n"); /* not fatal */
+    if (bind(pollstr[tindex].fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) < 0) {
+        perror("bind");
+        exit(1);
+    }
+    if (listen(pollstr[tindex].fd, 10) < 0) {
+        perror("listen");
+        exit(1);
+    }
+    while ((npoll = poll(pollstr, MAX_POLL, POLL_TIMEOUT)) >= 0)
         for (tindex = 0; npoll && tindex < MAX_POLL; tindex++) {
-            int read_len;
             if(!pollstr[tindex].revents)
                 continue;
             npoll--;
-            if (!otherfd[tindex]) {             /**** new connection request arrived */
-                int i;
-                struct sockaddr_in client;
-                unsigned int clientlen = sizeof(client);
-                if ((i = get_fd(accept(pollstr[tindex].fd,
-                           (struct sockaddr *)&client, &clientlen)))<0){
+            if (!otherfd[tindex]) { /**** new connection request arrived */
+                unsigned int clientlen = sizeof(sockaddr);
+                if ((read_len = get_fd(accept(pollstr[tindex].fd,
+                           (struct sockaddr *)&sockaddr, &clientlen)))<0){
                     perror("accept");
                     exit(1);
                 }
-                otherfd[i] = 1000;
+                otherfd[read_len] = 1000;
+                continue;
             }
-            else {
-                if ((read_len = read(pollstr[tindex].fd, temp_buf, sizeof(temp_buf))) <= 0) {
-                    }
-                else {
-                    temp_buf[read_len] = 0;
-                    //memdump(temp_buf, read_len, "RX");
-                    printf("INCOMING: %s\n", temp_buf);
-                    char *pp = strstr(temp_buf, "\r\n\r\n");
-                    if (pp && *(pp+4))
-                        storedata(pp + 4);
-                    else
-                        getdata(temp_buf);
-                    sprintf(temp_buf, resp, strlen(cdata));
-                    write(pollstr[tindex].fd, temp_buf, strlen(temp_buf));
-                    write(pollstr[tindex].fd, cdata, strlen(cdata));
-                };
-                shutdown(pollstr[tindex].fd, SHUT_RDWR);
-                close(pollstr[tindex].fd);
-                pollstr[tindex].fd = 0;
-                pollstr[tindex].events = 0;
-                printf("closed %d %d\n", tindex, pollstr[tindex].fd);
-                otherfd[tindex] = 0;
-            }
+            if ((read_len = read(pollstr[tindex].fd, temp_buf, sizeof(temp_buf))) > 0) {
+                temp_buf[read_len] = 0;
+                printf("INCOMING: %s\n", temp_buf);
+                char *pp = strstr(temp_buf, "\r\n\r\n");
+                if (pp && *(pp+4))
+                    storedata(pp + 4);
+                else
+                    getdata(temp_buf);
+                sprintf(temp_buf, resp, strlen(cdata));
+                write(pollstr[tindex].fd, temp_buf, strlen(temp_buf));
+                write(pollstr[tindex].fd, cdata, strlen(cdata));
+            };
+            shutdown(pollstr[tindex].fd, SHUT_RDWR);
+            close(pollstr[tindex].fd);
+            pollstr[tindex].fd = 0;
+            pollstr[tindex].events = 0;
+            printf("closed %d %d\n", tindex, pollstr[tindex].fd);
+            otherfd[tindex] = 0;
         }
-    }
     return 0;
 }
