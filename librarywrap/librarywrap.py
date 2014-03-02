@@ -50,7 +50,7 @@ def splittype(name, generatedname):
             return name + ' ' + generatedname, generatedname
     if ind == len(name) - 1:
         if name.startswith('...'):
-            return name, 'VARARG'
+            return name, 'VARARGS'
         return name + ' ' + generatedname, generatedname
     return name, name[ind+1:].strip()
 
@@ -121,7 +121,10 @@ def getargs(a, include_datatype):
     return '(' + retstr + ')'
         
 def generate_function(fname, wrap_lines):
-    print(functionproto[fname].rettype + getargs(fname, 0) + ' {')
+    conditional_flag = getargs(fname, 1).endswith('VARARGS)')
+    if conditional_flag:
+        print('#if 0 /* needs manual editing to support "..." */')
+    print(functionproto[fname].rettype + getargs(fname, 0) + '\n{')
     print('    static void *dlopen_ptr = NULL;')
     print('    static ' + functionproto[fname].rettype + '(*real_func)' + getargs(fname, 0) + ' = NULL;')
     print('    if (!dlopen_ptr) {')
@@ -141,7 +144,10 @@ def generate_function(fname, wrap_lines):
     if rtype == 'void':
         retstr = ''
     print('    ' + retstr + 'real_func' + getargs(fname, 1) + ';')
-    print('}\n')
+    print('}')
+    if conditional_flag:
+        print('#endif')
+    print('')
 
 if __name__=='__main__':
     parser = optparse.OptionParser("usage: %prog [options] arg")
