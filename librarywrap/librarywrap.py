@@ -22,7 +22,7 @@
 # SOFTWARE.
 
 from __future__ import print_function
-import os, sys
+import optparse, os, sys
 
 class Proto:
     def __init__(self):
@@ -119,8 +119,8 @@ def override(a, b):
     print('    static void *dlopen_ptr = NULL;')
     print('    static ' + functionproto[a].rettype + '(*dlsym_ptr)' + getargs(a, 0) + ' = NULL;')
     print('    if (!dlopen_ptr) {')
-    print('        if (!(dlopen_ptr = dlopen("' + libraryname + '", RTLD_LAZY))) {')
-    print('            fprintf(stderr, "Failed to dlopen ' + libraryname + ', error %s\\n", dlerror());')
+    print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {')
+    print('            fprintf(stderr, "Failed to dlopen ' + options.library + ', error %s\\n", dlerror());')
     print('            return -1;')
     print('        }')
     print('        dlsym_ptr = dlsym(dlopen_ptr, "' + a + '");')
@@ -129,10 +129,13 @@ def override(a, b):
     print('    return dlsym_ptr' + getargs(a, 1) + ';')
     print('}\n')
 
-libraryname = sys.argv[1]
-functionproto = {}
-for argstr in sys.argv[2:]:
-    parse_header(argstr)
-
-override('sqlite3_unlock_notify', '    {\n        printf("socket called\\n");\n    }')
-
+if __name__=='__main__':
+    parser = optparse.OptionParser("usage: %prog [options] arg")
+    parser.add_option("-l", "--library", dest="library")
+    parser.add_option("-o", "--output", dest="filename")
+    parser.add_option("-p", "--proto", action="append", dest="proto")
+    (options, args) = parser.parse_args()
+    functionproto = {}
+    for argstr in options.proto:
+        parse_header(argstr)
+    override('sqlite3_unlock_notify', '    {\n        printf("socket called\\n");\n    }')
