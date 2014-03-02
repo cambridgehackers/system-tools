@@ -1,0 +1,4 @@
+WRAP: sqlite3_unlock_notify
+    {
+        printf("sqlite3_unlock_notify called\n");
+    }

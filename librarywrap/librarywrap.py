@@ -30,26 +30,32 @@ class Proto:
         self.name = ''
         self.plist = []
 
-def splittype(name):
+def splittype(name, generatedname):
     if name[-1] == ')':
-        ind = name.find('(')
+        ind = name[:-1].find(')')
         if ind > 0:
-            temp = name[ind+1:]
-            ind = temp.find(')')
-            temp = temp[:ind].strip()
-            if temp[0] == '*':
-                return name, temp[1:].strip()
+            rind = ind - 1
+            while name[rind].isalnum() or name[rind] == '_' or name[rind] == ' ':
+                rind = rind - 1
+            rind = rind + 1
+            tname = name[rind:ind].strip()
+            if tname == '':
+                tname = generatedname
+                name = name[:rind] + generatedname + name[rind:]
+            return name, tname
     ind = len(name) - 1
     while name[ind].isalnum() or name[ind] == '_':
         ind = ind - 1
         if ind < 0:
-            return name + ' ', None
+            return name + ' ' + generatedname, generatedname
     if ind == len(name) - 1:
-        return name + ' ', None
+        if name.startswith('...'):
+            return name, 'VARARG'
+        return name + ' ' + generatedname, generatedname
     return name, name[ind+1:].strip()
 
 def parse_header(filename):
-    readdata = open(filename).read().replace('\r', '\n') + '\n'
+    readdata = open(filename).read().replace('\r', '\n').replace('\t', ' ') + '\n'
     while True:
         ind = readdata.find('/*')
         if ind < 0:
@@ -77,8 +83,8 @@ def parse_header(filename):
             sys.exit(1)
         remain = remain[:ind]
         p = Proto()
-        p.rettype, p.name = splittype(name)
-        if p.name == None:
+        p.rettype, p.name = splittype(name, '')
+        if p.name == '':
             continue
         #print('JJ', item, p.rettype, p.name)
         params = []
@@ -96,9 +102,11 @@ def parse_header(filename):
                 pstr = pstr + ch
         if pstr != '':
             params.append(pstr)
+        argindex = 0
         for pitem in params:
             pitem = pitem.strip()
-            fulls, name = splittype(pitem)
+            fulls, name = splittype(pitem, '__generatedarg' + str(argindex))
+            argindex = argindex + 1
             if name is not None:
                 p.plist.append([fulls, name])
         functionproto[p.name] = p
@@ -112,30 +120,62 @@ def getargs(a, include_datatype):
         sepitem = ', '
     return '(' + retstr + ')'
         
-def override(a, b):
-    print('#include <stdio.h>')
-    print('#include <dlfcn.h>')
-    print(functionproto[a].rettype + a + getargs(a, 0) + ' {')
+def generate_function(fname, wrap_lines):
+    print(functionproto[fname].rettype + getargs(fname, 0) + ' {')
     print('    static void *dlopen_ptr = NULL;')
-    print('    static ' + functionproto[a].rettype + '(*dlsym_ptr)' + getargs(a, 0) + ' = NULL;')
+    print('    static ' + functionproto[fname].rettype + '(*real_func)' + getargs(fname, 0) + ' = NULL;')
     print('    if (!dlopen_ptr) {')
     print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {')
     print('            fprintf(stderr, "Failed to dlopen ' + options.library + ', error %s\\n", dlerror());')
     print('            return -1;')
     print('        }')
-    print('        dlsym_ptr = dlsym(dlopen_ptr, "' + a + '");')
+    print('        real_func = dlsym(dlopen_ptr, "' + fname + '");')
     print('    }')
-    print('    /////////////////////////////////////////\n' + b + '\n    /////////////////////////////////////////')
-    print('    return dlsym_ptr' + getargs(a, 1) + ';')
+    print('    /////////////////////////////////////////\n    {')
+    for temp in wrap_lines:
+        print(temp)
+    print('    }\n    /////////////////////////////////////////')
+    retstr = 'return '
+    rtype = functionproto[fname].rettype[:-len(fname)].strip()
+    #print('KKKK', fname, '"' + rtype +'"')
+    if rtype == 'void':
+        retstr = ''
+    print('    ' + retstr + 'real_func' + getargs(fname, 1) + ';')
     print('}\n')
 
 if __name__=='__main__':
     parser = optparse.OptionParser("usage: %prog [options] arg")
     parser.add_option("-l", "--library", dest="library")
+    parser.add_option("-t", "--trace", action="store_true", dest="trace", default=False)
     parser.add_option("-o", "--output", dest="filename")
     parser.add_option("-p", "--proto", action="append", dest="proto")
     (options, args) = parser.parse_args()
     functionproto = {}
     for argstr in options.proto:
         parse_header(argstr)
-    override('sqlite3_unlock_notify', '    {\n        printf("socket called\\n");\n    }')
+    wlist = {}
+    for afile in args:
+        lines = open(afile).readlines()
+        fname = ''
+        wtemp = []
+        for temp in lines:
+            temp = temp.rstrip()
+            if temp.strip().startswith('WRAP:'):
+                if wtemp != []:
+                    wlist[fname] = wtemp
+                fname = temp.strip()[5:].strip()
+                wtemp = []
+            else:
+                wtemp.append(temp)
+        if wtemp != []:
+            wlist[fname] = wtemp
+    print('#include <stdio.h>')
+    print('#include <dlfcn.h>\n')
+    for key in functionproto.iterkeys():
+        item = wlist.get(key)
+        if item is None:
+            item = [ '    printf("[%s] called\\n", __FUNCTION__);' ]
+            if not options.trace:
+                continue
+        generate_function(key, item)
+
