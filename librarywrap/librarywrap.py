@@ -47,6 +47,8 @@ def splittype(name, generatedname):
     while name[ind].isalnum() or name[ind] == '_':
         ind = ind - 1
         if ind < 0:
+            if name.strip() == 'void':
+                return name, ''
             return name + ' ' + generatedname, generatedname
     if ind == len(name) - 1:
         if name.startswith('...'):
@@ -68,7 +70,7 @@ def parse_header(filename):
     for item in lines:
         item = item.replace('\n', ' ').strip()
         if item.startswith('#') or item.startswith('//') or item.startswith('typedef')\
-          or item.find('{') >= 0 or item.find('DEPRECATED'):
+          or item.find('{') >= 0 or item.find('DEPRECATED') > 0:
             continue
         ind = item.find('(')
         if ind < 0:
@@ -184,10 +186,16 @@ if __name__=='__main__':
             wlist[fname] = wtemp
     print('#include <stdio.h>', file=outfile)
     print('#include <dlfcn.h>\n', file=outfile)
+    print('static FILE *logfile;', file=outfile)
+    print('static void openlogfile(void)', file=outfile)
+    print('{', file=outfile)
+    print('if (!logfile)', file=outfile)
+    print('    logfile = fopen("/tmp/xx.logfile", "w");', file=outfile)
+    print('}', file=outfile)
     for key in functionproto.iterkeys():
         item = wlist.get(key)
         if item is None:
-            item = [ '    printf("[%s] called\\n", __FUNCTION__);' ]
+            item = [ '    fprintf(logfile, "[%s] called\\n", __FUNCTION__);' ]
             if not options.trace:
                 continue
         generate_function(key, item)
