@@ -138,7 +138,7 @@ def generate_function(fname, wrap_lines):
     print('        openlogfile();', file=outfile)
     print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {', file=outfile)
     print('            fprintf(stderr, "Failed to dlopen ' + options.library + ', error %s\\n", dlerror());', file=outfile)
-    if rettype == 'void':
+    if rettype == 'void' or True:
         print('            return;', file=outfile)
     else:
         print('            return -1;', file=outfile)
