@@ -123,17 +123,19 @@ def getargs(a, include_datatype):
         sepitem = ', '
     return '(' + retstr + ')'
         
-def generate_function(fname, wrap_lines):
-    retstr = 'return '
+def generate_function(fname, wrap_pre, wrap_post):
     rettype = functionproto[fname].rettype[:-len(fname)].strip()
+    retassign = 'retval = '
     if rettype == 'void':
-        retstr = ''
+        retassign = ''
     conditional_flag = getargs(fname, 1).endswith('VARARGS)')
     if conditional_flag:
         print('#if 0 /* needs manual editing to support "..." */', file=outfile)
     print(functionproto[fname].rettype + getargs(fname, 0) + '\n{', file=outfile)
     print('    static void *dlopen_ptr = NULL;', file=outfile)
     print('    static ' + functionproto[fname].rettype[:-len(fname)] + '(*real_func)' + getargs(fname, 0) + ' = NULL;', file=outfile)
+    if retassign != '':
+        print('    ' + rettype + ' retval;', file=outfile)
     print('    if (!dlopen_ptr) {', file=outfile)
     print('        openlogfile();', file=outfile)
     print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {', file=outfile)
@@ -146,10 +148,14 @@ def generate_function(fname, wrap_lines):
     print('        real_func = dlsym(dlopen_ptr, "' + fname + '");', file=outfile)
     print('    }', file=outfile)
     print('    /////////////////////////////////////////\n    {', file=outfile)
-    for temp in wrap_lines:
+    for temp in wrap_pre:
         print(temp, file=outfile)
     print('    }\n    /////////////////////////////////////////', file=outfile)
-    print('    ' + retstr + 'real_func' + getargs(fname, 1) + ';', file=outfile)
+    print('    ' + retassign + 'real_func' + getargs(fname, 1) + ';', file=outfile)
+    for temp in wrap_post:
+        print(temp, file=outfile)
+    if retassign != '':
+        print('    return retval;', file=outfile)
     print('}', file=outfile)
     if conditional_flag:
         print('#endif', file=outfile)
@@ -169,22 +175,36 @@ if __name__=='__main__':
         outfile = sys.stdout
     for argstr in options.proto:
         parse_header(argstr)
-    wlist = {}
+    pre_list = {}
+    post_list = {}
     for afile in args:
         lines = open(afile).readlines()
         fname = ''
-        wtemp = []
+        lines_list = []
+        in_prelines = True
         for temp in lines:
             temp = temp.rstrip()
+            if temp.strip().startswith('POST:'):
+                in_prelines = False
+                if lines_list != []:
+                    pre_list[fname] = lines_list
+                lines_list = []
             if temp.strip().startswith('WRAP:'):
-                if wtemp != []:
-                    wlist[fname] = wtemp
+                if lines_list != []:
+                    if in_prelines:
+                        pre_list[fname] = lines_list
+                    else:
+                        post_list[fname] = lines_list
                 fname = temp.strip()[5:].strip()
-                wtemp = []
+                lines_list = []
+                in_prelines = True
             else:
-                wtemp.append(temp)
-        if wtemp != []:
-            wlist[fname] = wtemp
+                lines_list.append(temp)
+        if lines_list != []:
+            if in_prelines:
+                pre_list[fname] = lines_list
+            else:
+                post_list[fname] = lines_list
     print('#include <stdio.h>', file=outfile)
     print('#include <dlfcn.h>\n', file=outfile)
     print('static FILE *logfile;', file=outfile)
@@ -194,10 +214,14 @@ if __name__=='__main__':
     print('    logfile = fopen("/tmp/xx.logfile", "w");', file=outfile)
     print('}', file=outfile)
     for key in functionproto.iterkeys():
-        item = wlist.get(key)
-        if item is None:
-            item = [ '    fprintf(logfile, "[%s] called\\n", __FUNCTION__);' ]
-            if not options.trace:
-                continue
-        generate_function(key, item)
+        preitem = pre_list.get(key)
+        postitem = post_list.get(key)
+        if preitem is None:
+            preitem = []
+            if options.trace:
+                preitem = [ '    fprintf(logfile, "[%s] called\\n", __FUNCTION__);' ]
+        if postitem is None:
+            postitem = []
+        if preitem != [] or postitem != []:
+            generate_function(key, preitem, postitem)
 

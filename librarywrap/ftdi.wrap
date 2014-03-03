@@ -26,8 +26,9 @@ WRAP: ftdi_read_data_set_chunksize
 //int ftdi_read_data_set_chunksize(struct ftdi_context *ftdi, unsigned int chunksize)
     fprintf(logfile, "%s: %p %d\n", __FUNCTION__, ftdi, chunksize);
 WRAP: ftdi_read_data_submit
+POST:
 //struct ftdi_transfer_control *ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
-    fprintf(logfile, "%s: %p %p %d\n", __FUNCTION__, ftdi, buf, size);
+    fprintf(logfile, "%s: %p %p %d = %p\n", __FUNCTION__, ftdi, buf, size, retval);
 WRAP: ftdi_read_eeprom
 //int ftdi_read_eeprom(struct ftdi_context *ftdi)
     fprintf(logfile, "%s: %p\n", __FUNCTION__, ftdi);
@@ -74,6 +75,7 @@ WRAP: ftdi_write_data
 //int ftdi_write_data(struct ftdi_context *ftdi, const unsigned char *buf, int size)
     fprintf(logfile, "%s: %p %d\n", __FUNCTION__, ftdi, size);
 WRAP: ftdi_write_data_submit
+POST:
 //struct ftdi_transfer_control *ftdi_write_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
-    fprintf(logfile, "%s: %p %p %d\n", __FUNCTION__, ftdi, buf, size);
+    fprintf(logfile, "%s: %p %p %d = %p\n", __FUNCTION__, ftdi, buf, size, retval);
     memdump(buf, size, "WRITE");
