@@ -67,7 +67,8 @@ def parse_header(filename):
     lines = readdata.split(';')
     for item in lines:
         item = item.replace('\n', ' ').strip()
-        if item.startswith('#') or item.startswith('//') or item.startswith('typedef') or item.find('{') >= 0:
+        if item.startswith('#') or item.startswith('//') or item.startswith('typedef')\
+          or item.find('{') >= 0 or item.find('DEPRECATED'):
             continue
         ind = item.find('(')
         if ind < 0:
@@ -121,33 +122,35 @@ def getargs(a, include_datatype):
     return '(' + retstr + ')'
         
 def generate_function(fname, wrap_lines):
+    retstr = 'return '
+    rettype = functionproto[fname].rettype[:-len(fname)].strip()
+    if rettype == 'void':
+        retstr = ''
     conditional_flag = getargs(fname, 1).endswith('VARARGS)')
     if conditional_flag:
-        print('#if 0 /* needs manual editing to support "..." */')
-    print(functionproto[fname].rettype + getargs(fname, 0) + '\n{')
-    print('    static void *dlopen_ptr = NULL;')
-    print('    static ' + functionproto[fname].rettype + '(*real_func)' + getargs(fname, 0) + ' = NULL;')
-    print('    if (!dlopen_ptr) {')
-    print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {')
-    print('            fprintf(stderr, "Failed to dlopen ' + options.library + ', error %s\\n", dlerror());')
-    print('            return -1;')
-    print('        }')
-    print('        real_func = dlsym(dlopen_ptr, "' + fname + '");')
-    print('    }')
-    print('    /////////////////////////////////////////\n    {')
+        print('#if 0 /* needs manual editing to support "..." */', file=outfile)
+    print(functionproto[fname].rettype + getargs(fname, 0) + '\n{', file=outfile)
+    print('    static void *dlopen_ptr = NULL;', file=outfile)
+    print('    static ' + functionproto[fname].rettype[:-len(fname)] + '(*real_func)' + getargs(fname, 0) + ' = NULL;', file=outfile)
+    print('    if (!dlopen_ptr) {', file=outfile)
+    print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {', file=outfile)
+    print('            fprintf(stderr, "Failed to dlopen ' + options.library + ', error %s\\n", dlerror());', file=outfile)
+    if rettype == 'void':
+        print('            return;', file=outfile)
+    else:
+        print('            return -1;', file=outfile)
+    print('        }', file=outfile)
+    print('        real_func = dlsym(dlopen_ptr, "' + fname + '");', file=outfile)
+    print('    }', file=outfile)
+    print('    /////////////////////////////////////////\n    {', file=outfile)
     for temp in wrap_lines:
-        print(temp)
-    print('    }\n    /////////////////////////////////////////')
-    retstr = 'return '
-    rtype = functionproto[fname].rettype[:-len(fname)].strip()
-    #print('KKKK', fname, '"' + rtype +'"')
-    if rtype == 'void':
-        retstr = ''
-    print('    ' + retstr + 'real_func' + getargs(fname, 1) + ';')
-    print('}')
+        print(temp, file=outfile)
+    print('    }\n    /////////////////////////////////////////', file=outfile)
+    print('    ' + retstr + 'real_func' + getargs(fname, 1) + ';', file=outfile)
+    print('}', file=outfile)
     if conditional_flag:
-        print('#endif')
-    print('')
+        print('#endif', file=outfile)
+    print('', file=outfile)
 
 if __name__=='__main__':
     parser = optparse.OptionParser("usage: %prog [options] arg")
@@ -157,6 +160,10 @@ if __name__=='__main__':
     parser.add_option("-p", "--proto", action="append", dest="proto")
     (options, args) = parser.parse_args()
     functionproto = {}
+    if options.filename:
+        outfile = open(options.filename, 'w')
+    else:
+        outfile = sys.stdout
     for argstr in options.proto:
         parse_header(argstr)
     wlist = {}
@@ -175,8 +182,8 @@ if __name__=='__main__':
                 wtemp.append(temp)
         if wtemp != []:
             wlist[fname] = wtemp
-    print('#include <stdio.h>')
-    print('#include <dlfcn.h>\n')
+    print('#include <stdio.h>', file=outfile)
+    print('#include <dlfcn.h>\n', file=outfile)
     for key in functionproto.iterkeys():
         item = wlist.get(key)
         if item is None:
