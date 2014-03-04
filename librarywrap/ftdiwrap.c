@@ -33,66 +33,38 @@ int i;
 static void formatwrite(const unsigned char *p, int len, char *title)
 {
     while (len > 0) {
-        unsigned char ch = *p++;
+        const unsigned char *pstart = p;
+        int plen = 1;
+        unsigned char ch = *p;
         switch(ch) {
-        case 0x85:
-        case 0x87:
-        case 0x8a:
-        case 0xaa:
-        case 0xab:
-            fprintf(logfile, "%02x\n", ch);
+        case 0x85: case 0x87: case 0x8a: case 0xaa: case 0xab:
             break;
-        case 0x2e:
-        case 0x3d:
-            { /* 2 bytes */
-            fprintf(logfile, "%02x %02x\n", ch, *p++);
-            len -= 1;
-            }
+        case 0x2e: case 0x3d:
+            plen = 2;
             break;
-        case 0x2c:
-        case 0x3f:
-        case 0x6f:
-        case 0x4b:
-        case 0x1b:
-        case 0x80:
-        case 0x82:
-        case 0x86:
-        case 0x8f:
-            { /* 3 bytes */
-            unsigned char ch2 = *p++;
-            fprintf(logfile, "%02x %02x %02x\n", ch, ch2, *p++);
-            len -= 2;
-            }
+        case 0x19: case 0x1b: case 0x2c: case 0x3f: case 0x4b:
+        case 0x6f: case 0x80: case 0x82: case 0x86: case 0x8f:
+            plen = 3;
             break;
-        case 0x00:
-        case 0xff:
-            { /* 4 bytes */
-            unsigned char ch2 = *p++;
-            unsigned char ch3 = *p++;
-            fprintf(logfile, "%02x %02x %02x %02x\n", ch, ch2, ch3, *p++);
-            len -= 3;
-            }
-            break;
-        case 0x19:
-            { /* 3 bytes + data */
-            unsigned char ch2 = *p++;
-            unsigned char ch3 = *p++;
-            fprintf(logfile, "%02x %02x %02x\n", ch, ch2, ch3);
-            len -= 2;
-            unsigned tlen = (ch3 << 8 | ch2) + 1;
-            memdump(p, tlen > 64 ? 64 : tlen, "        WDATA");
-            p += tlen;
-            len -= tlen;
-            }
+        case 0x00: case 0xff:
+            plen = 4;
             break;
         default:
             memdump(p-1, len, title);
             return;
         }
-        len--;
+        memdump(pstart, plen, "    ");
+        p += plen;
+        len -= plen;
+        if (ch == 0x19) {
+            unsigned tlen = (pstart[2] << 8 | pstart[1]) + 1;
+            memdump(p, tlen > 64 ? 64 : tlen, "        WDATA");
+            p += tlen;
+            len -= tlen;
+        }
     }
     if (len != 0)
-        printf("[%s] ending length %d\n", __FUNCTION__, __LINE__, len);
+        printf("[%s] ending length %d\n", __FUNCTION__, len);
 }
 
 static void dump_context(struct ftdi_context *p)
