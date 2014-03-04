@@ -23,20 +23,19 @@ static struct ftdi_context *master_ftdi;
 #include "ftdiwrap.h"
 
 #define MAX_ITEMS 1000
-#define MIN_ITEM 100
 
 static struct {
     unsigned char *p;
     int len;
 } strarr[MAX_ITEMS];
-static int strarr_index = MIN_ITEM;
+static int strarr_index = 0;
 struct ftdi_context *ctxarr[MAX_ITEMS];
-static int ctxarr_index = MIN_ITEM;
+static int ctxarr_index = 0;
 
 static char *translate_context(struct ftdi_context *p)
 {
 static char tempstr[200];
-int i = MIN_ITEM;
+int i = 0;
 while (i < ctxarr_index) {
     if (p == ctxarr[i])
         break;
@@ -44,13 +43,13 @@ while (i < ctxarr_index) {
 }
 if (i == ctxarr_index)
     ctxarr[ctxarr_index++] = p;
-sprintf(tempstr, "ctxitem%d", i);
+sprintf(tempstr, "ctxitem%dz", i);
 return tempstr;
 }
 
 static int lookup(const unsigned char *buf, int len)
 {
-int i = MIN_ITEM;
+int i = 0;
 if (len > 500)
     return -1;
 while (i < strarr_index) {
@@ -142,12 +141,12 @@ static char *writedata(const char *fn, const unsigned char *buf, int size)
 }
 static void final_dump(void)
 {
-int i = MIN_ITEM;
+int i = 0;
 while (i < ctxarr_index)
-    fprintf(logfile, "static struct ftdi_context *ctxitem%d;\n", i++);
-i = MIN_ITEM;
+    fprintf(logfile, "static struct ftdi_context *ctxitem%dz;\n", i++);
+i = 0;
 while (i < strarr_index) {
-    fprintf(logfile, "static unsigned char item%d = {\n", i);
+    fprintf(logfile, "static unsigned char item%dz = {\n", i);
     formatwrite(strarr[i].p, strarr[i].len, "STRARR");
     fprintf(logfile, "};\n");
     i++;
@@ -156,6 +155,7 @@ while (i < strarr_index) {
 
 static void dump_context(struct ftdi_context *p)
 {
+return;
     fprintf(logfile, "context: %p\n", p);
     fprintf(logfile, "    .usb_ctx: %p,\n", p->usb_ctx);
     fprintf(logfile, "    .usb_dev: %p,\n", p->usb_dev);

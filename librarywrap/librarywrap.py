@@ -234,7 +234,7 @@ if __name__=='__main__':
         postitem = post_list.get(key)
         if preitem is None:
             preitem = []
-            if options.trace:
+            if options.trace and postitem is None:
                 preitem = [ '    fprintf(logfile, "[%s] called\\n", __FUNCTION__);' ]
         if postitem is None:
             postitem = []
