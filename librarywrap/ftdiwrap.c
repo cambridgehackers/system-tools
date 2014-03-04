@@ -6,11 +6,11 @@
 
 #define ACCUM_LIMIT 12000
 
-static void memdump(const unsigned char *p, int len, char *title);
-static void formatwrite(const unsigned char *p, int len, char *title);
+static void memdump(const unsigned char *p, int len, const char *title);
 static void dump_context(struct ftdi_context *p);
 static void final_dump(void);
-static int lookup(const unsigned char *buf, int len);
+static char *writedata(const char *fn, const unsigned char *buf, int size);
+static char *translate_context(struct ftdi_context *p);
 
 static struct ftdi_transfer_control *read_data_submit_control;
 static unsigned char *read_data_buffer;
@@ -22,16 +22,35 @@ static struct ftdi_context *master_ftdi;
 
 #include "ftdiwrap.h"
 
-#define MAX_STRINGS 4000
+#define MAX_ITEMS 1000
+#define MIN_ITEM 100
+
 static struct {
     unsigned char *p;
     int len;
-} strarr[MAX_STRINGS];
-static int strarr_index;
+} strarr[MAX_ITEMS];
+static int strarr_index = MIN_ITEM;
+struct ftdi_context *ctxarr[MAX_ITEMS];
+static int ctxarr_index = MIN_ITEM;
+
+static char *translate_context(struct ftdi_context *p)
+{
+static char tempstr[200];
+int i = MIN_ITEM;
+while (i < ctxarr_index) {
+    if (p == ctxarr[i])
+        break;
+    i++;
+}
+if (i == ctxarr_index)
+    ctxarr[ctxarr_index++] = p;
+sprintf(tempstr, "ctxitem%d", i);
+return tempstr;
+}
 
 static int lookup(const unsigned char *buf, int len)
 {
-int i = 0;
+int i = MIN_ITEM;
 if (len > 500)
     return -1;
 while (i < strarr_index) {
@@ -39,7 +58,7 @@ while (i < strarr_index) {
         return i;
     i++;
 }
-if (i < MAX_STRINGS) {
+if (i < MAX_ITEMS) {
     strarr[i].p = (unsigned char *)malloc(len);
     strarr[i].len = len;
     memcpy(strarr[i].p, buf, len);
@@ -47,17 +66,8 @@ if (i < MAX_STRINGS) {
 }
 return -1;
 }
-static void final_dump(void)
-{
-int i = 0;
-while (i < strarr_index) {
-    fprintf(logfile, "item %d\n", i);
-    formatwrite(strarr[i].p, strarr[i].len, "STRARR");
-    i++;
-}
-}
 
-static void memdump(const unsigned char *p, int len, char *title)
+static void memdump(const unsigned char *p, int len, const char *title)
 {
 int i;
 
@@ -74,7 +84,7 @@ int i;
     }
     fprintf(logfile, "\n");
 }
-static void formatwrite(const unsigned char *p, int len, char *title)
+static void formatwrite(const unsigned char *p, int len, const char *title)
 {
     if (accum >= ACCUM_LIMIT) {
         accum = 0;
@@ -113,6 +123,35 @@ static void formatwrite(const unsigned char *p, int len, char *title)
     }
     if (len != 0)
         printf("[%s] ending length %d\n", __FUNCTION__, len);
+}
+static char *writedata(const char *fn, const unsigned char *buf, int size)
+{
+    static char tempbuf[200];
+    if (size < 1000)
+        accum = 0;
+    if (accum < ACCUM_LIMIT) {
+        int ind = lookup(buf, size);
+        if (ind == -1)
+            formatwrite(buf, size, fn);
+        else
+            fprintf(logfile, "%s item %d\n", fn, ind);
+    }
+    accum += size;
+    sprintf(tempbuf, "%p, %d", buf, size);
+    return tempbuf;
+}
+static void final_dump(void)
+{
+int i = MIN_ITEM;
+while (i < ctxarr_index)
+    fprintf(logfile, "static struct ftdi_context *ctxitem%d;\n", i++);
+i = MIN_ITEM;
+while (i < strarr_index) {
+    fprintf(logfile, "static unsigned char item%d = {\n", i);
+    formatwrite(strarr[i].p, strarr[i].len, "STRARR");
+    fprintf(logfile, "};\n");
+    i++;
+}
 }
 
 static void dump_context(struct ftdi_context *p)
