@@ -1,9 +1,13 @@
 WRAP: ftdi_init
 //int ftdi_init(struct ftdi_context *ftdi);
     fprintf(logfile, "\n%s(%p)\n", __FUNCTION__, ftdi);
+    if (!master_ftdi)
+        master_ftdi = ftdi;
     accum = 0;
 WRAP: ftdi_deinit
     fprintf(logfile, "%s(%p)\n", __FUNCTION__, ftdi);
+    if (master_ftdi == ftdi)
+        final_dump();
 WRAP: ftdi_eeprom_decode
     fprintf(logfile, "%s(%p, %d)\n", __FUNCTION__, ftdi, verbose);
 POST:
@@ -151,7 +155,11 @@ POST:
 WRAP: ftdi_write_data
 //int ftdi_write_data(struct ftdi_context *ftdi, const unsigned char *buf, int size)
     fprintf(logfile, "%s(%p, %p, %d)\n", __FUNCTION__, ftdi, buf, size);
-    formatwrite(buf, size, "WRITED");
+    int ind = lookup(buf, size);
+    if (ind == -1)
+        formatwrite(buf, size, "WRITED");
+    else
+        fprintf(logfile, "WRITED item %d\n", ind);
 POST:
     if (retval != size)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
@@ -167,7 +175,12 @@ POST:
 {
     if (size < 1000)
         accum = 0;
-    if (accum < ACCUM_LIMIT)
-        formatwrite(buf, size, "WRITE");
+    if (accum < ACCUM_LIMIT) {
+        int ind = lookup(buf, size);
+        if (ind == -1)
+            formatwrite(buf, size, "WRITE");
+        else
+            fprintf(logfile, "WRITE item %d\n", ind);
+    }
     accum += size;
 }

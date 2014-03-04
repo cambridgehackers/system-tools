@@ -1,4 +1,6 @@
 
+#include <malloc.h>
+#include <string.h>
 
 #include "ftdi_reference.h"
 
@@ -7,14 +9,53 @@
 static void memdump(const unsigned char *p, int len, char *title);
 static void formatwrite(const unsigned char *p, int len, char *title);
 static void dump_context(struct ftdi_context *p);
+static void final_dump(void);
+static int lookup(const unsigned char *buf, int len);
+
 static struct ftdi_transfer_control *read_data_submit_control;
 static unsigned char *read_data_buffer;
 static int read_data_len;
 static struct ftdi_transfer_control *write_data_submit_control;
 static int write_data_len;
 static long accum;
+static struct ftdi_context *master_ftdi;
 
 #include "ftdiwrap.h"
+
+#define MAX_STRINGS 4000
+static struct {
+    unsigned char *p;
+    int len;
+} strarr[MAX_STRINGS];
+static int strarr_index;
+
+static int lookup(const unsigned char *buf, int len)
+{
+int i = 0;
+if (len > 500)
+    return -1;
+while (i < strarr_index) {
+    if (strarr[i].len == len && !memcmp(buf, strarr[i].p, len))
+        return i;
+    i++;
+}
+if (i < MAX_STRINGS) {
+    strarr[i].p = (unsigned char *)malloc(len);
+    strarr[i].len = len;
+    memcpy(strarr[i].p, buf, len);
+    return strarr_index++;
+}
+return -1;
+}
+static void final_dump(void)
+{
+int i = 0;
+while (i < strarr_index) {
+    fprintf(logfile, "item %d\n", i);
+    formatwrite(strarr[i].p, strarr[i].len, "STRARR");
+    i++;
+}
+}
 
 static void memdump(const unsigned char *p, int len, char *title)
 {
