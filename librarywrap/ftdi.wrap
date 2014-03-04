@@ -1,6 +1,7 @@
 WRAP: ftdi_init
 //int ftdi_init(struct ftdi_context *ftdi);
     fprintf(logfile, "%s(%p)\n", __FUNCTION__, ftdi);
+    accum = 0;
 WRAP: ftdi_deinit
     fprintf(logfile, "%s(%p)\n", __FUNCTION__, ftdi);
 WRAP: ftdi_eeprom_decode
@@ -159,7 +160,6 @@ POST:
     write_data_submit_control = retval;
     write_data_len = size;
 {
-static long accum = 0;
     if (size < 1000)
         accum = 0;
     if (accum < 3000)
