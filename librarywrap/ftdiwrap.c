@@ -1,4 +1,8 @@
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <malloc.h>
 #include <string.h>
 
@@ -9,16 +13,22 @@
 static void memdump(const unsigned char *p, int len, const char *title);
 static void dump_context(struct ftdi_context *p);
 static void final_dump(void);
-static char *writedata(const char *fn, const unsigned char *buf, int size);
+static char *writedata(int submit, const unsigned char *buf, int size);
 static char *translate_context(struct ftdi_context *p);
+static char *readdata(const unsigned char *buf, int size);
+static char *translate_buffer(void *p, int len);
+static void end_datafile();
 
 static struct ftdi_transfer_control *read_data_submit_control;
+static struct ftdi_context *read_data_context;
 static unsigned char *read_data_buffer;
 static int read_data_len;
 static struct ftdi_transfer_control *write_data_submit_control;
 static int write_data_len;
 static long accum;
 static struct ftdi_context *master_ftdi;
+static int datafile_fd = -1;
+static int datafile_index;
 
 #include "ftdiwrap.h"
 
@@ -29,8 +39,18 @@ static struct {
     int len;
 } strarr[MAX_ITEMS];
 static int strarr_index = 0;
-struct ftdi_context *ctxarr[MAX_ITEMS];
+static struct {
+    unsigned char *p;
+    int len;
+} readarr[MAX_ITEMS];
+static int readarr_index = 0;
+static struct ftdi_context *ctxarr[MAX_ITEMS];
 static int ctxarr_index = 0;
+static struct {
+    void *p;
+    int len;
+} bufarr[MAX_ITEMS];
+static int bufarr_index = 0;
 
 static char *translate_context(struct ftdi_context *p)
 {
@@ -47,23 +67,21 @@ sprintf(tempstr, "ctxitem%dz", i);
 return tempstr;
 }
 
-static int lookup(const unsigned char *buf, int len)
+static char *translate_buffer(void *p, int len)
 {
+static char tempstr[200];
 int i = 0;
-if (len > 500)
-    return -1;
-while (i < strarr_index) {
-    if (strarr[i].len == len && !memcmp(buf, strarr[i].p, len))
-        return i;
+while (i < bufarr_index) {
+    if (p == bufarr[i].p && bufarr[i].len == len)
+        break;
     i++;
 }
-if (i < MAX_ITEMS) {
-    strarr[i].p = (unsigned char *)malloc(len);
-    strarr[i].len = len;
-    memcpy(strarr[i].p, buf, len);
-    return strarr_index++;
+if (i == bufarr_index) {
+    bufarr[bufarr_index].p = p;
+    bufarr[bufarr_index++].len = len;
 }
-return -1;
+sprintf(tempstr, "bufitem%dz, sizeof(bufitem%dz)", i, i);
+return strdup(tempstr);
 }
 
 static void memdump(const unsigned char *p, int len, const char *title)
@@ -75,9 +93,9 @@ int i;
         if (!(i & 0xf)) {
             if (i > 0)
                 fprintf(logfile, "\n");
-            fprintf(logfile, "%s: ",title);
+            fprintf(logfile, "%s ",title);
         }
-        fprintf(logfile, "%02x ", *p++);
+        fprintf(logfile, "0x%02x, ", *p++);
         i++;
         len--;
     }
@@ -85,10 +103,12 @@ int i;
 }
 static void formatwrite(const unsigned char *p, int len, const char *title)
 {
+#if 0
     if (accum >= ACCUM_LIMIT) {
         accum = 0;
         fprintf(logfile, "\n");
     }
+#endif
     while (len > 0) {
         const unsigned char *pstart = p;
         int plen = 1;
@@ -115,7 +135,7 @@ static void formatwrite(const unsigned char *p, int len, const char *title)
         len -= plen;
         if (ch == 0x19) {
             unsigned tlen = (pstart[2] << 8 | pstart[1]) + 1;
-            memdump(p, tlen > 64 ? 64 : tlen, "        WDATA");
+            memdump(p, tlen > 64 ? 64 : tlen, "         ");
             p += tlen;
             len -= tlen;
         }
@@ -123,20 +143,77 @@ static void formatwrite(const unsigned char *p, int len, const char *title)
     if (len != 0)
         printf("[%s] ending length %d\n", __FUNCTION__, len);
 }
-static char *writedata(const char *fn, const unsigned char *buf, int size)
+#define FILE_BYTE_SIZE  500
+static char *writedata(int submit, const unsigned char *buf, int size)
 {
+static unsigned char bitswap[256];
+static int once = 1;
     static char tempbuf[200];
-    if (size < 1000)
-        accum = 0;
+    if (submit && datafile_fd < 0 && size >= FILE_BYTE_SIZE) {
+        sprintf(tempbuf, "/tmp/xx.datafile%d", datafile_index++);
+        fprintf(logfile, "[%s] opening file '%s'\n", __FUNCTION__, tempbuf);
+        datafile_fd = creat(tempbuf, 0666);
+    }
+    if (datafile_fd >= 0) {
+        int i;
+        for (i = 0; once && i < sizeof(bitswap); i++)
+            bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
+                       | ((i &    4) << 3) | ((i &    8) << 1)
+                       | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
+                       | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
+        once = 0;
+        unsigned char *p = (unsigned char *)malloc(size);
+        for (i = 0; i < size; i++)
+            p[i] = bitswap[buf[i]];
+        write(datafile_fd, p, size);
+        free(p);
+    }
     if (accum < ACCUM_LIMIT) {
-        int ind = lookup(buf, size);
-        if (ind == -1)
-            formatwrite(buf, size, fn);
-        else
-            fprintf(logfile, "%s item %d\n", fn, ind);
+        int ind = -1;
+        int i = 0;
+        if (size > FILE_BYTE_SIZE)
+            formatwrite(buf, size, "WRITE");
+        else {
+            while (i < strarr_index) {
+                if (strarr[i].len == size && !memcmp(buf, strarr[i].p, size)) {
+                    ind = i;
+                    break;
+                }
+                i++;
+            }
+            if (i == strarr_index) {
+                strarr[i].p = (unsigned char *)malloc(size);
+                strarr[i].len = size;
+                memcpy(strarr[i].p, buf, size);
+                ind = strarr_index++;
+            }
+            sprintf(tempbuf, "item%dz, sizeof(item%dz)", ind, ind);
+            return tempbuf;
+        }
     }
     accum += size;
     sprintf(tempbuf, "%p, %d", buf, size);
+    return tempbuf;
+}
+static char *readdata(const unsigned char *buf, int size)
+{
+    static char tempbuf[200];
+    int ind = -1;
+    int i = 0;
+    while (i < readarr_index) {
+        if (readarr[i].len == size && !memcmp(buf, readarr[i].p, size)) {
+            ind = i;
+            break;
+        }
+        i++;
+    }
+    if (i == readarr_index) {
+        readarr[i].p = (unsigned char *)malloc(size);
+        readarr[i].len = size;
+        memcpy(readarr[i].p, buf, size);
+        ind = readarr_index++;
+    }
+    sprintf(tempbuf, "readdata%dz, sizeof(readdata%dz)", ind, ind);
     return tempbuf;
 }
 static void final_dump(void)
@@ -145,12 +222,34 @@ int i = 0;
 while (i < ctxarr_index)
     fprintf(logfile, "static struct ftdi_context *ctxitem%dz;\n", i++);
 i = 0;
+while (i < bufarr_index) {
+    fprintf(logfile, "static unsigned char bufitem%dz[%d];\n", i, bufarr[i].len);
+    i++;
+}
+i = 0;
 while (i < strarr_index) {
     fprintf(logfile, "static unsigned char item%dz = {\n", i);
     formatwrite(strarr[i].p, strarr[i].len, "STRARR");
     fprintf(logfile, "};\n");
     i++;
 }
+i = 0;
+while (i < readarr_index) {
+    fprintf(logfile, "static unsigned char readdata%dz = {\n", i);
+    memdump(readarr[i].p, readarr[i].len, "    ");
+    fprintf(logfile, "};\n");
+    i++;
+}
+}
+
+static void end_datafile()
+{
+    if (accum >= ACCUM_LIMIT)
+        fprintf(logfile, "\n");
+    accum = 0;
+    if (datafile_fd >= 0)
+        close(datafile_fd);
+    datafile_fd = -1;
 }
 
 static void dump_context(struct ftdi_context *p)
