@@ -66,7 +66,21 @@ def parse_header(filename):
         if endind < 0:
             endind = len(readdata)-3
         readdata = readdata[:ind] + ' ' + readdata[endind+2:]
-    lines = readdata.split(';')
+    lines = []
+    templine = ''
+    lastlf = -1
+    for ch in readdata:
+        if ch == ';':
+            lines.append(templine)
+            templine = ''
+        else:
+            if ch == '\n':
+                if lastlf >= 0 and templine[lastlf+1:lastlf+2] == '#':
+                    lines.append(templine[:lastlf])
+                    templine = ''
+                lastlf = len(templine)
+            templine = templine + ch
+    lines.append(templine)
     for item in lines:
         item = item.replace('\n', ' ').strip()
         if item.startswith('#') or item.startswith('//') or item.startswith('typedef')\
@@ -140,7 +154,9 @@ def generate_function(fname, wrap_pre, wrap_post):
     print('        openlogfile();', file=outfile)
     print('        if (!(dlopen_ptr = dlopen("' + options.library + '", RTLD_LAZY))) {', file=outfile)
     print('            fprintf(stderr, "Failed to dlopen ' + options.library + ', error %s\\n", dlerror());', file=outfile)
-    if rettype == 'void' or True:
+    if rettype[-1] == '*':
+        print('            return NULL;', file=outfile)
+    elif retassign == '' or rettype.startswith('struct'):
         print('            return;', file=outfile)
     else:
         print('            return -1;', file=outfile)
@@ -189,7 +205,7 @@ if __name__=='__main__':
                 if lines_list != []:
                     pre_list[fname] = lines_list
                 lines_list = []
-            if temp.strip().startswith('WRAP:'):
+            elif temp.strip().startswith('WRAP:'):
                 if lines_list != []:
                     if in_prelines:
                         pre_list[fname] = lines_list
