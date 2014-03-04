@@ -1,5 +1,8 @@
 
+
 #include "ftdi_reference.h"
+
+#define ACCUM_LIMIT 12000
 
 static void memdump(const unsigned char *p, int len, char *title);
 static void formatwrite(const unsigned char *p, int len, char *title);
@@ -32,6 +35,10 @@ int i;
 }
 static void formatwrite(const unsigned char *p, int len, char *title)
 {
+    if (accum >= ACCUM_LIMIT) {
+        accum = 0;
+        fprintf(logfile, "\n");
+    }
     while (len > 0) {
         const unsigned char *pstart = p;
         int plen = 1;

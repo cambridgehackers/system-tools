@@ -1,6 +1,6 @@
 WRAP: ftdi_init
 //int ftdi_init(struct ftdi_context *ftdi);
-    fprintf(logfile, "%s(%p)\n", __FUNCTION__, ftdi);
+    fprintf(logfile, "\n%s(%p)\n", __FUNCTION__, ftdi);
     accum = 0;
 WRAP: ftdi_deinit
     fprintf(logfile, "%s(%p)\n", __FUNCTION__, ftdi);
@@ -37,6 +37,7 @@ WRAP: ftdi_read_data
     fprintf(logfile, "%s(%p, %p, %d)\n", __FUNCTION__, ftdi, buf, size);
 POST:
     memdump(buf, size, "READD");
+    accum = 0;
     if (retval != size)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_read_data_set_chunksize
@@ -87,6 +88,7 @@ WRAP: ftdi_transfer_data_done
 //int ftdi_transfer_data_done(struct ftdi_transfer_control *tc)
 POST:
     if (tc == read_data_submit_control) {
+        accum = 0;
         if (retval != read_data_len)
             fprintf(logfile, "%s(%p) = %d\n", __FUNCTION__, tc, retval);
         memdump(read_data_buffer, read_data_len, "READ");
@@ -156,13 +158,16 @@ POST:
 WRAP: ftdi_write_data_submit
 //struct ftdi_transfer_control *ftdi_write_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
 POST:
-    fprintf(logfile, "%s(%p, %p, %d) = %p\n", __FUNCTION__, ftdi, buf, size, retval);
+    if (accum < ACCUM_LIMIT)
+        fprintf(logfile, "%s(%p, %p, %d) = %p\n", __FUNCTION__, ftdi, buf, size, retval);
+    else
+        fprintf(logfile, " %d", size);
     write_data_submit_control = retval;
     write_data_len = size;
 {
     if (size < 1000)
         accum = 0;
-    if (accum < 3000)
+    if (accum < ACCUM_LIMIT)
         formatwrite(buf, size, "WRITE");
     accum += size;
 }
