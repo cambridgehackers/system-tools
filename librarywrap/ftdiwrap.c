@@ -144,6 +144,21 @@ static void formatwrite(const unsigned char *p, int len, const char *title)
         printf("[%s] ending length %d\n", __FUNCTION__, len);
 }
 #define FILE_BYTE_SIZE  500
+static unsigned char data1[] = { /* first packet */
+    0x4b, 0x1, 0x1,
+    0x4b, 0x2, 0x1,
+    0x19, 0x3, 0x0,
+        0x0, 0x0, 0x0, 0x0,
+    0x19, 0xc0, 0x0f};
+static unsigned char data2[] = { /* short start */
+    0x19, 0x7d, 0x09};
+static unsigned char data3[] = { /* short end */
+    0x1b, 0x6, 0,
+    0x4b, 1, 1};
+static unsigned char data4[] = { /* long start */
+    0x4b, 1, 1,
+    0x19, 0xcd, 0x0f};
+
 static char *writedata(int submit, const unsigned char *buf, int size)
 {
 static unsigned char bitswap[256];
@@ -154,19 +169,40 @@ static int once = 1;
         fprintf(logfile, "[%s] opening file '%s'\n", __FUNCTION__, tempbuf);
         datafile_fd = creat(tempbuf, 0666);
     }
-    if (datafile_fd >= 0) {
-        int i;
+    if (submit && datafile_fd >= 0) {
+        int i, tsize = size;
         for (i = 0; once && i < sizeof(bitswap); i++)
             bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
                        | ((i &    4) << 3) | ((i &    8) << 1)
                        | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
                        | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
-        once = 0;
         unsigned char *p = (unsigned char *)malloc(size);
+        unsigned char *pdata = p;
         for (i = 0; i < size; i++)
             p[i] = bitswap[buf[i]];
-        write(datafile_fd, p, size);
+        if (once) {
+            if (memcmp(buf, data1, sizeof(data1)))
+                memdump(buf, sizeof(data1), "DATA1");
+            pdata += sizeof(data1);
+            tsize -= sizeof(data1);
+        }
+        else if (tsize > 4000) {
+            if (memcmp(buf, data4, sizeof(data4)))
+                memdump(buf, sizeof(data4), "DATA4");
+            pdata += 6;
+            tsize -= 6;
+        }
+        else {
+            if (memcmp(buf, data2, sizeof(data2)))
+                memdump(buf, sizeof(data2), "DATA2");
+            if (memcmp(&buf[size - sizeof(data3)], data3, sizeof(data3)))
+                memdump(&buf[size - sizeof(data3)], sizeof(data3), "DATA3");
+            pdata += 3;
+            tsize -= 9;
+        }
+        write(datafile_fd, pdata, tsize);
         free(p);
+        once = 0;
     }
     if (accum < ACCUM_LIMIT) {
         int ind = -1;
@@ -216,9 +252,20 @@ static char *readdata(const unsigned char *buf, int size)
     sprintf(tempbuf, "readdata%dz, sizeof(readdata%dz)", ind, ind);
     return tempbuf;
 }
+
+static void end_datafile()
+{
+    if (accum >= ACCUM_LIMIT)
+        fprintf(logfile, "\n");
+    accum = 0;
+    if (datafile_fd >= 0)
+        close(datafile_fd);
+    datafile_fd = -1;
+}
 static void final_dump(void)
 {
 int i = 0;
+end_datafile();
 while (i < ctxarr_index)
     fprintf(logfile, "static struct ftdi_context *ctxitem%dz;\n", i++);
 i = 0;
@@ -240,16 +287,6 @@ while (i < readarr_index) {
     fprintf(logfile, "};\n");
     i++;
 }
-}
-
-static void end_datafile()
-{
-    if (accum >= ACCUM_LIMIT)
-        fprintf(logfile, "\n");
-    accum = 0;
-    if (datafile_fd >= 0)
-        close(datafile_fd);
-    datafile_fd = -1;
 }
 
 static void dump_context(struct ftdi_context *p)

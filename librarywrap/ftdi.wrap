@@ -2,7 +2,7 @@ WRAP: ftdi_init
     fprintf(logfile, "\n%s(%s);\n", __FUNCTION__, translate_context(ftdi));
     if (!master_ftdi)
         master_ftdi = ftdi;
-    end_datafile();
+    //end_datafile();
 WRAP: ftdi_deinit
     fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
     if (master_ftdi == ftdi)
@@ -37,7 +37,7 @@ WRAP: ftdi_read_data
 POST:
     fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), readdata(buf, size));
     //memdump(buf, size, "READD");
-    end_datafile();
+    //end_datafile();
     if (retval != size)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_read_data_set_chunksize
@@ -49,7 +49,7 @@ WRAP: ftdi_read_data_submit
 POST:
 //struct ftdi_transfer_control *ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
     //fprintf(logfile, "%s(%s, %p, %d) = %p\n", __FUNCTION__, translate_context(ftdi), buf, size, retval);
-    end_datafile();
+    //end_datafile();
     read_data_context = ftdi;
     read_data_submit_control = retval;
     read_data_buffer = buf;
