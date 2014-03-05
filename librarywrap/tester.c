@@ -543,7 +543,7 @@ static void add1byte(int last, unsigned char argch)
     *(readptr-1) |= (0x80 & ch);
 }
 static unsigned char filebuffer[10000];
-static int indata(int len, int rlen)
+static void indata(int len, int rlen, unsigned char *ptrin)
 {
     int i;
                 for (i = 0; once && i < sizeof(bitswap); i++)
@@ -555,7 +555,6 @@ static int indata(int len, int rlen)
     unsigned char *p = readptr;
     *readptr++ = len;
     *readptr++ = len >> 8;
-    unsigned char *ptrin = filebuffer;
     for (i = 0; i < rlen; i++)
         *readptr++ = bitswap[*ptrin++];
     rlen--;
@@ -565,7 +564,6 @@ static int indata(int len, int rlen)
         p[1] = rlen >> 8;
         add1byte(1, *--readptr);
     }
-    return rlen;
 }
 static void outbuffer(struct ftdi_context *ftdi)
 {
@@ -658,22 +656,31 @@ writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
 check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
 inputfd = open("mkPcieTop.bin", O_RDONLY);
+#define FILE_READSIZE 6463
+read(inputfd, filebuffer, FILE_READSIZE);
 memcpy(readptr, hdr1, sizeof(hdr1));
 readptr += sizeof(hdr1);
-int retlen = indata(4032, read(inputfd, filebuffer, 4032+1));
+indata(4032, 4032+1, filebuffer);
 outbuffer(ctxitem0z); //4049
-retlen = indata(2429, read(inputfd, filebuffer, 2429+1));
+indata(2429, 2429+1, filebuffer+4032+1);
 add1byte(0, 0); // 0x1b 0x06 0xvv, 0x4b 0x01 0x01
 outbuffer(ctxitem0z); //2439
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 while (1) {
-    memcpy(readptr, hdr4b, sizeof(hdr4b));
-    readptr += sizeof(hdr4b);
-    retlen = indata(4045, read(inputfd, filebuffer, 4045+1));
-    outbuffer(ctxitem0z); //4052
-    if (retlen != 4045)
+    int rlen = read(inputfd, filebuffer, FILE_READSIZE);
+    unsigned char *pbuf = filebuffer;
+
+    {
+        memcpy(readptr, hdr4b, sizeof(hdr4b));
+        readptr += sizeof(hdr4b);
+        indata(4045, rlen > 4045+1 ? 4045+1 : rlen, filebuffer);
+        outbuffer(ctxitem0z); //4052
+        rlen -= 4045+1;
+        pbuf += 4045+1;
+    }
+    if (rlen <= 0)
         break;
-    retlen = indata(2416, read(inputfd, filebuffer, 2416+1));
+    indata(2416, rlen, pbuf);
     add1byte(0, 0); // 0x1b 0x06 0xvv
     outbuffer(ctxitem0z); //2426
 }
