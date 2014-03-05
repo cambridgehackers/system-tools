@@ -542,7 +542,8 @@ static void add1byte(int last, unsigned char argch)
     readptr += sizeof(hdr4b);
     *(readptr-1) |= (0x80 & ch);
 }
-static int indata(int len)
+static unsigned char filebuffer[10000];
+static int indata(int len, int rlen)
 {
     int i;
                 for (i = 0; once && i < sizeof(bitswap); i++)
@@ -554,11 +555,9 @@ static int indata(int len)
     unsigned char *p = readptr;
     *readptr++ = len;
     *readptr++ = len >> 8;
-    int rlen = read(inputfd, readptr, len+1);
-    for (i = 0; i < rlen; i++) {
-        *readptr = bitswap[*readptr];
-        readptr++;
-    }
+    unsigned char *ptrin = filebuffer;
+    for (i = 0; i < rlen; i++)
+        *readptr++ = bitswap[*ptrin++];
     rlen--;
     if (rlen != len) {
         rlen--;
@@ -661,24 +660,22 @@ check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 inputfd = open("mkPcieTop.bin", O_RDONLY);
 memcpy(readptr, hdr1, sizeof(hdr1));
 readptr += sizeof(hdr1);
-int retlen = indata(0xfc0);
+int retlen = indata(4032, read(inputfd, filebuffer, 4032+1));
 outbuffer(ctxitem0z); //4049
-retlen = indata(0x97d);
+retlen = indata(2429, read(inputfd, filebuffer, 2429+1));
 add1byte(0, 0); // 0x1b 0x06 0xvv, 0x4b 0x01 0x01
 outbuffer(ctxitem0z); //2439
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 while (1) {
     memcpy(readptr, hdr4b, sizeof(hdr4b));
     readptr += sizeof(hdr4b);
-    retlen = indata(0xfcd);
+    retlen = indata(4045, read(inputfd, filebuffer, 4045+1));
     outbuffer(ctxitem0z); //4052
-    if (retlen != 0xfcd)
+    if (retlen != 4045)
         break;
-    retlen = indata(0x970);
+    retlen = indata(2416, read(inputfd, filebuffer, 2416+1));
     add1byte(0, 0); // 0x1b 0x06 0xvv
     outbuffer(ctxitem0z); //2426
-    if (retlen != 0x970)
-        break;
 }
 
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
