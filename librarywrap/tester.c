@@ -511,88 +511,80 @@ static unsigned char item4z[] = {
         test_pattern(ftdi);
 }
 #define FILE_READSIZE 6464
-static unsigned char bitswap[256];
 int main()
 {
-int i, j, k;
+static unsigned char bitswap[256];
+    int i, j, k;
     struct ftdi_device_list *devlist, *curdev;
-    //char manufacturer[128], description[128];
 
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ctxitem0z = ftdi_new();
-printf("[%s:%d] init\n", __FUNCTION__, __LINE__);
-ftdi_init(ctxitem0z);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
+    ctxitem0z = ftdi_new();
+    ftdi_init(ctxitem0z);
+    ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
     curdev = devlist;
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ftdi_usb_get_strings(ctxitem0z, curdev->dev, bufitem2z, sizeof(bufitem2z), bufitem1z, sizeof(bufitem1z), bufitem0z, sizeof(bufitem0z));
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    ftdi_usb_get_strings(ctxitem0z, curdev->dev, bufitem2z, sizeof(bufitem2z), bufitem1z, sizeof(bufitem1z), bufitem0z, sizeof(bufitem0z));
 
-printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, bufitem2z, bufitem1z, bufitem0z);
-//ftdi_usb_get_strings: ret 0 man=Digilent
-//      desc=Digilent Adept USB Device
-//      serial=210203339470
-ftdi_usb_open_dev(ctxitem0z, curdev->dev);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ftdi_usb_reset(ctxitem0z);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ftdi_set_baudrate(ctxitem0z, 9600);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ftdi_read_eeprom(ctxitem0z);
-ftdi_eeprom_decode(ctxitem0z, 0);
-int eeprom_val;
-ftdi_get_eeprom_value(ctxitem0z, CHIP_TYPE, &eeprom_val);
-printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
-static unsigned char fbuf[256]; // since chiptype is 0x56, eerom size is 256
-int rc = ftdi_get_eeprom_buf(ctxitem0z, fbuf, sizeof(fbuf));
-printf("[%s:%d] %d\n", __FUNCTION__, __LINE__, rc);
-ftdi_list_free(&devlist);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-ftdi_set_latency_timer(ctxitem0z, 255);
-ftdi_set_bitmode(ctxitem0z, 0x0, 0x0);
-ftdi_set_bitmode(ctxitem0z, 0x0, 0x2);
-ftdi_usb_purge_buffers(ctxitem0z);
-ftdi_usb_purge_rx_buffer(ctxitem0z);
-ftdi_usb_purge_tx_buffer(ctxitem0z);
-for (i = 0; i < 4; i++) {
-    ftdi_write_data(ctxitem0z, item0z, sizeof(item0z));
+    printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, bufitem2z, bufitem1z, bufitem0z);
+    ftdi_usb_open_dev(ctxitem0z, curdev->dev);
+    ftdi_usb_reset(ctxitem0z);
+    ftdi_list_free(&devlist);
+
+    int eeprom_val;
+    unsigned char fbuf[256]; // since chiptype is 0x56, eerom size is 256
+    ftdi_read_eeprom(ctxitem0z);
+    ftdi_eeprom_decode(ctxitem0z, 0);
+    ftdi_get_eeprom_value(ctxitem0z, CHIP_TYPE, &eeprom_val);
+    printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
+    ftdi_get_eeprom_buf(ctxitem0z, fbuf, sizeof(fbuf));
+
+    ftdi_set_baudrate(ctxitem0z, 9600);
+    ftdi_set_latency_timer(ctxitem0z, 255);
+    ftdi_set_bitmode(ctxitem0z, 0, 0);
+    ftdi_set_bitmode(ctxitem0z, 0, 2);
+    ftdi_usb_purge_buffers(ctxitem0z);
+    ftdi_usb_purge_rx_buffer(ctxitem0z);
+    ftdi_usb_purge_tx_buffer(ctxitem0z);
+
+    for (i = 0; i < 4; i++) {
+        ftdi_write_data(ctxitem0z, item0z, sizeof(item0z));
+        ftdi_read_data(ctxitem0z, readdata0z, sizeof(readdata0z));
+        ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
+    }
+    ftdi_write_data(ctxitem0z, item1z, sizeof(item1z));
     ftdi_read_data(ctxitem0z, readdata0z, sizeof(readdata0z));
-    ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
-}
-ftdi_write_data(ctxitem0z, item1z, sizeof(item1z));
-ftdi_read_data(ctxitem0z, readdata0z, sizeof(readdata0z));
-ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
-ftdi_write_data(ctxitem0z, item2z, sizeof(item2z));
-writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
-check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+    ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
-for (k = 0; k < 2; k++)
-    test_different(ctxitem0z);
-writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
-ftdi_transfer_data_done(writetc);
-ftdi_write_data(ctxitem0z, item9z, sizeof(item9z));
-writetc = ftdi_write_data_submit(ctxitem0z, item10z, sizeof(item10z));
-check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
-writetc = ftdi_write_data_submit(ctxitem0z, item11z, sizeof(item11z));
-check_ftdi_read_data_submit(ctxitem0z, readdata6z, sizeof(readdata6z));
-for (i = 0; i < 3; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item12z, sizeof(item12z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
-check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
-writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
-writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
-check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
-for (j = 0; j < 3; j++)
-    test_pattern(ctxitem0z);
-for (k = 0; k < 3; k++)
-    test_different(ctxitem0z);
-writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
-check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
-writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
-check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
+    ftdi_write_data(ctxitem0z, item2z, sizeof(item2z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+
+    for (k = 0; k < 2; k++)
+        test_different(ctxitem0z);
+    writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
+    ftdi_transfer_data_done(writetc);
+    ftdi_write_data(ctxitem0z, item9z, sizeof(item9z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item10z, sizeof(item10z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
+
+    writetc = ftdi_write_data_submit(ctxitem0z, item11z, sizeof(item11z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata6z, sizeof(readdata6z));
+    for (i = 0; i < 3; i++) {
+        writetc = ftdi_write_data_submit(ctxitem0z, item12z, sizeof(item12z));
+        check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
+    }
+    writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+
+    for (j = 0; j < 3; j++)
+        test_pattern(ctxitem0z);
+    for (k = 0; k < 3; k++)
+        test_different(ctxitem0z);
+    writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
@@ -661,24 +653,24 @@ check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
         *readptr++ = 0x01;
     }
 
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
-check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
-writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
-check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
-check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
+    printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
+    printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
 
-writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
-ftdi_transfer_data_done(writetc);
-writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
-check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
-test_different(ctxitem0z);
-writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
-check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
-writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
-ftdi_transfer_data_done(writetc);
-ftdi_deinit(ctxitem0z);
-return 0;
+    writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
+    ftdi_transfer_data_done(writetc);
+    writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
+    test_different(ctxitem0z);
+    writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
+    check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
+    writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
+    ftdi_transfer_data_done(writetc);
+    ftdi_deinit(ctxitem0z);
+    return 0;
 }
