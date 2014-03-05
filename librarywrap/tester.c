@@ -9,19 +9,10 @@
 
 #include "ftdi_reference.h"
 
-static struct ftdi_context *ctxitem0z;
-static char bufitem0z[64];
-static char bufitem1z[128];
-static char bufitem2z[64];
-static unsigned char item0z[] = {
-     0xaa, 
-     0x87, 
-};
-static unsigned char item1z[] = {
-     0xab, 
-     0x87, 
-};
-static unsigned char item2z[] = {
+static unsigned char command_aa[] = { 0xaa, 0x87, };
+static unsigned char command_ab[] = { 0xab, 0x87, };
+static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
+static unsigned char initialize_sequence[] = {
      0x85, 
      0x8a, 
      0x86, 0x01, 0x00, 
@@ -31,37 +22,9 @@ static unsigned char item2z[] = {
      0x82, 0x00, 0x00, 
      0x4b, 0x04, 0x1f, 
 };
-static unsigned char item3z[] = {
-     0x4b, 0x00, 0x01, 
-     0x4b, 0x04, 0x7f, 
-     0x4b, 0x03, 0x02, 
-     0x3d, 0x3e, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x3f, 0x06, 0x00, 
-     0x6f, 0x02, 0x03, 
-     0x87, 
-};
 static unsigned char item8z[] = {
      0x4b, 0x02, 0x07, 
      0x4b, 0x00, 0x7f, 
-};
-static unsigned char item9z[] = {
-     0x86, 0x01, 0x00, 
 };
 static unsigned char item10z[] = {
      0x4b, 0x00, 0x01, 
@@ -147,9 +110,7 @@ static unsigned char item13z[] = {
      0x6f, 0x02, 0x03, 
      0x87, 
 };
-static unsigned char item14z[] = {
-     0x4b, 0x02, 0x07, 
-};
+static unsigned char item14z[] = { 0x4b, 0x02, 0x07, };
 static unsigned char item15z[] = {
      0x4b, 0x02, 0x07, 
      0x4b, 0x00, 0x7f, 
@@ -181,25 +142,10 @@ static unsigned char item16z[] = {
      0x6f, 0x00, 0x01, 
      0x87, 
 };
-static unsigned char readdata0z[] = {
-     0xfa, 
-};
-static unsigned char readdata1z[] = {
-     0xaa, 
-};
-static unsigned char readdata2z[] = {
-     0xab, 
-};
-static unsigned char readdata3z[] = {
-     0x93, 0x10, 0x65, 0x43, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
-     0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
-     0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
-     0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
-     0x00, 
-};
-static unsigned char readdata4z[] = {
-     0x00, 0x00, 0x00, 0x00, 0x00, 
-};
+static unsigned char errorcode_fa[] = { 0xfa, };
+static unsigned char readdata1z[] = { 0xaa, };
+static unsigned char readdata2z[] = { 0xab, };
+static unsigned char readdata4z[] = { 0x00, 0x00, 0x00, 0x00, 0x00, };
 static unsigned char readdata5z[] = {
      0x93, 0x10, 0x65, 0x43, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
@@ -211,33 +157,15 @@ static unsigned char readdata5z[] = {
      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
      0xff, 
 };
-static unsigned char readdata6z[] = {
-     0xff, 0xff, 0xff, 0xff, 0xff, 
-};
-static unsigned char readdata7z[] = {
-     0xaf, 0xf5, 
-};
-static unsigned char readdata8z[] = {
-     0x02, 0x08, 0x9e, 0x7f, 0x0f, 
-};
-static unsigned char readdata9z[] = {
-     0x88, 0x44, 
-};
-static unsigned char readdata10z[] = {
-     0x8a, 0x45, 
-};
-static unsigned char readdata11z[] = {
-     0x00, 0x00, 0x00, 0x00, 0x80, 
-};
-static unsigned char readdata12z[] = {
-     0xac, 0xd6, 
-};
-static unsigned char readdata13z[] = {
-     0x02, 0x08, 0x9e, 0x7f, 0x3f, 
-};
-static unsigned char readdata14z[] = {
-     0xa9, 0xf5, 
-};
+static unsigned char readdata6z[] = { 0xff, 0xff, 0xff, 0xff, 0xff, };
+static unsigned char readdata7z[] = { 0xaf, 0xf5, };
+static unsigned char readdata8z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x0f, };
+static unsigned char readdata9z[] = { 0x88, 0x44, };
+static unsigned char readdata10z[] = { 0x8a, 0x45, };
+static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
+static unsigned char readdata12z[] = { 0xac, 0xd6, };
+static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
+static unsigned char readdata14z[] = { 0xa9, 0xf5, };
 static unsigned char item17z[] = {
      0x80, 0xe0, 0xfb, 
      0x80, 0xe0, 0xfa, 
@@ -394,28 +322,21 @@ static unsigned char item22z[] = {
      0x6f, 0x02, 0x03, 
      0x87, 
 };
-static int inputfd;
 #define BUFFER_MAX_LEN 1000000
+static struct ftdi_transfer_control* writetc;
+static int inputfd;
 
-void foo(void)
+//static void foo(void)
+//{
+    ////force loading of libpthread
+    //pthread_create(NULL, NULL, NULL, NULL);
+//}
+static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
 {
-//force loading of libpthread
-pthread_create(NULL, NULL, NULL, NULL);
-}
-struct ftdi_transfer_control* writetc;
-void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
-{
-struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, buf, size);
-ftdi_transfer_data_done(writetc);
-ftdi_transfer_data_done(tc);
-//printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-}
-void c2heck_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
-{
-struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, buf, size);
-//ftdi_transfer_data_done(writetc);
-ftdi_transfer_data_done(tc);
-//printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, buf, size);
+    ftdi_transfer_data_done(writetc);
+    ftdi_transfer_data_done(tc);
+    //printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 }
 static void test_pattern(struct ftdi_context *ftdi)
 {
@@ -477,6 +398,39 @@ int i;
         check_ftdi_read_data_submit(ftdi, readdata4z, sizeof(readdata4z));
     }
 }
+
+static unsigned char readdata3z[] = {
+     0x93, 0x10, 0x65, 0x43, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
+     0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
+     0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
+     0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 
+     0x00, 
+};
+static unsigned char item3z[] = {
+     0x4b, 0x00, 0x01, 
+     0x4b, 0x04, 0x7f, 
+     0x4b, 0x03, 0x02, 
+     0x3d, 0x3e, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x3f, 0x06, 0x00, 
+     0x6f, 0x02, 0x03, 
+     0x87, 
+};
 static void test_different(struct ftdi_context *ftdi)
 {
 static unsigned char item4z[] = {
@@ -513,17 +467,21 @@ static unsigned char item4z[] = {
 #define FILE_READSIZE 6464
 int main()
 {
-static unsigned char bitswap[256];
+    unsigned char bitswap[256];
+    struct ftdi_context *ctxitem0z;
     int i, j, k;
     struct ftdi_device_list *devlist, *curdev;
+    char tempstr0z[64];
+    char tempstr1z[128];
+    char tempstr2z[64];
 
     ctxitem0z = ftdi_new();
     ftdi_init(ctxitem0z);
     ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
     curdev = devlist;
-    ftdi_usb_get_strings(ctxitem0z, curdev->dev, bufitem2z, sizeof(bufitem2z), bufitem1z, sizeof(bufitem1z), bufitem0z, sizeof(bufitem0z));
+    ftdi_usb_get_strings(ctxitem0z, curdev->dev, tempstr2z, sizeof(tempstr2z), tempstr1z, sizeof(tempstr1z), tempstr0z, sizeof(tempstr0z));
 
-    printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, bufitem2z, bufitem1z, bufitem0z);
+    printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, tempstr2z, tempstr1z, tempstr0z);
     ftdi_usb_open_dev(ctxitem0z, curdev->dev);
     ftdi_usb_reset(ctxitem0z);
     ftdi_list_free(&devlist);
@@ -545,15 +503,15 @@ static unsigned char bitswap[256];
     ftdi_usb_purge_tx_buffer(ctxitem0z);
 
     for (i = 0; i < 4; i++) {
-        ftdi_write_data(ctxitem0z, item0z, sizeof(item0z));
-        ftdi_read_data(ctxitem0z, readdata0z, sizeof(readdata0z));
+        ftdi_write_data(ctxitem0z, command_aa, sizeof(command_aa));
+        ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
     }
-    ftdi_write_data(ctxitem0z, item1z, sizeof(item1z));
-    ftdi_read_data(ctxitem0z, readdata0z, sizeof(readdata0z));
+    ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
+    ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
     ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
-    ftdi_write_data(ctxitem0z, item2z, sizeof(item2z));
+    ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
     writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
     check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
 
@@ -561,7 +519,7 @@ static unsigned char bitswap[256];
         test_different(ctxitem0z);
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
-    ftdi_write_data(ctxitem0z, item9z, sizeof(item9z));
+    ftdi_write_data(ctxitem0z, command_86, sizeof(command_86));
     writetc = ftdi_write_data_submit(ctxitem0z, item10z, sizeof(item10z));
     check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
 
@@ -591,6 +549,7 @@ static unsigned char bitswap[256];
            | ((i &    4) << 3) | ((i &    8) << 1)
            | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
            | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
+    printf("Starting to send file\n");
     inputfd = open("mkPcieTop.bin", O_RDONLY);
     int limit_len = 4032;
     int last = 0;
@@ -638,7 +597,7 @@ static unsigned char bitswap[256];
                 *readptr++ = 0x01;
                 *readptr++ = 0x01 | (0x80 & ch); // 1 bit if data here
             }
-            printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
+            //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
             writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
             ftdi_transfer_data_done(writetc);
             writetc = NULL;
@@ -653,12 +612,11 @@ static unsigned char bitswap[256];
         *readptr++ = 0x01;
     }
 
-    printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
     writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
     check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
     writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
     check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
-    printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
     check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
 

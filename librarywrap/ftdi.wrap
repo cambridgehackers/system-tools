@@ -1,11 +1,9 @@
 WRAP: ftdi_init
     fprintf(logfile, "\n%s(%s);\n", __FUNCTION__, translate_context(ftdi));
-printf("inimasterftdi %p\n", master_ftdi);
     if (!master_ftdi)
         master_ftdi = ftdi;
     //end_datafile();
 WRAP: ftdi_deinit
-printf("deinimasterftdi %p ftdi %p\n", master_ftdi, ftdi);
     fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
     if (master_ftdi == ftdi)
         final_dump();
