@@ -56,79 +56,6 @@ static unsigned char item3z[] = {
      0x6f, 0x02, 0x03, 
      0x87, 
 };
-static unsigned char item4z[] = {
-     0x4b, 0x02, 0x07, 
-     0x4b, 0x04, 0x7f, 
-     0x4b, 0x03, 0x02, 
-     0x3d, 0x3e, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x00, 0xff, 0x00, 0x00, 
-     0x3f, 0x06, 0x00, 
-     0x6f, 0x02, 0x03, 
-     0x87, 
-};
-static unsigned char item5z[] = {
-     0x4b, 0x03, 0x03, 
-     0x1b, 0x04, 0xff, 
-     0x4b, 0x02, 0x83, 
-     0x4b, 0x03, 0x03, 
-     0x1b, 0x04, 0xc3, 
-     0x4b, 0x02, 0x03, 
-     0x4b, 0x02, 0x01, 
-     0x2c, 0x02, 0x00, 
-     0x2e, 0x06, 
-     0x6f, 0x02, 0x03, 
-     0x87, 
-};
-static unsigned char item6z[] = {
-     0x4b, 0x03, 0x03, 
-     0x1b, 0x04, 0xff, 
-     0x4b, 0x02, 0x83, 
-     0x4b, 0x03, 0x03, 
-     0x1b, 0x04, 0xc3, 
-     0x4b, 0x02, 0x03, 
-     0x4b, 0x02, 0x01, 
-     0x19, 0x00, 0x00, 
-          0x69, 
-     0x1b, 0x01, 0x00, 
-     0x2c, 0x02, 0x00, 
-     0x2e, 0x06, 
-     0x6f, 0x02, 0x03, 
-     0x87, 
-};
-static unsigned char item7z[] = {
-     0x4b, 0x03, 0x03, 
-     0x1b, 0x04, 0xff, 
-     0x4b, 0x02, 0x83, 
-     0x4b, 0x03, 0x03, 
-     0x1b, 0x04, 0xc3, 
-     0x4b, 0x02, 0x03, 
-     0x4b, 0x02, 0x01, 
-     0x1b, 0x04, 0x0c, 
-     0x4b, 0x02, 0x03, 
-     0x4b, 0x02, 0x01, 
-     0x19, 0x00, 0x00, 
-          0x69, 
-     0x1b, 0x01, 0x00, 
-     0x2c, 0x02, 0x00, 
-     0x2e, 0x06, 
-     0x6f, 0x02, 0x03, 
-     0x87, 
-};
 static unsigned char item8z[] = {
      0x4b, 0x02, 0x07, 
      0x4b, 0x00, 0x7f, 
@@ -494,6 +421,54 @@ ftdi_transfer_data_done(tc);
 }
 static void test_pattern(struct ftdi_context *ftdi)
 {
+static unsigned char item5z[] = {
+     0x4b, 0x03, 0x03, 
+     0x1b, 0x04, 0xff, 
+     0x4b, 0x02, 0x83, 
+     0x4b, 0x03, 0x03, 
+     0x1b, 0x04, 0xc3, 
+     0x4b, 0x02, 0x03, 
+     0x4b, 0x02, 0x01, 
+     0x2c, 0x02, 0x00, 
+     0x2e, 0x06, 
+     0x6f, 0x02, 0x03, 
+     0x87, 
+};
+static unsigned char item6z[] = {
+     0x4b, 0x03, 0x03, 
+     0x1b, 0x04, 0xff, 
+     0x4b, 0x02, 0x83, 
+     0x4b, 0x03, 0x03, 
+     0x1b, 0x04, 0xc3, 
+     0x4b, 0x02, 0x03, 
+     0x4b, 0x02, 0x01, 
+     0x19, 0x00, 0x00, 
+          0x69, 
+     0x1b, 0x01, 0x00, 
+     0x2c, 0x02, 0x00, 
+     0x2e, 0x06, 
+     0x6f, 0x02, 0x03, 
+     0x87, 
+};
+static unsigned char item7z[] = {
+     0x4b, 0x03, 0x03, 
+     0x1b, 0x04, 0xff, 
+     0x4b, 0x02, 0x83, 
+     0x4b, 0x03, 0x03, 
+     0x1b, 0x04, 0xc3, 
+     0x4b, 0x02, 0x03, 
+     0x4b, 0x02, 0x01, 
+     0x1b, 0x04, 0x0c, 
+     0x4b, 0x02, 0x03, 
+     0x4b, 0x02, 0x01, 
+     0x19, 0x00, 0x00, 
+          0x69, 
+     0x1b, 0x01, 0x00, 
+     0x2c, 0x02, 0x00, 
+     0x2e, 0x06, 
+     0x6f, 0x02, 0x03, 
+     0x87, 
+};
 int i;
     writetc = ftdi_write_data_submit(ftdi, item5z, sizeof(item5z));
     check_ftdi_read_data_submit(ftdi, readdata4z, sizeof(readdata4z));
@@ -506,6 +481,31 @@ int i;
 }
 static void test_different(struct ftdi_context *ftdi)
 {
+static unsigned char item4z[] = {
+     0x4b, 0x02, 0x07, 
+     0x4b, 0x04, 0x7f, 
+     0x4b, 0x03, 0x02, 
+     0x3d, 0x3e, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x00, 0xff, 0x00, 0x00, 
+     0x3f, 0x06, 0x00, 
+     0x6f, 0x02, 0x03, 
+     0x87, 
+};
     int j;
     writetc = ftdi_write_data_submit(ftdi, item4z, sizeof(item4z));
     check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
@@ -523,27 +523,16 @@ static unsigned char hdr4b[] = {
 };
 static unsigned char bitswap[256];
 static int once = 1;
-static void add1byte(int last, unsigned char argch)
-{
-    unsigned char ch = argch;
-    *readptr++ = 0x1b;
-    *readptr++ = 0x06;
-    if (!last) {
-        read(inputfd, readptr, 1);
-        ch = bitswap[*readptr];
-    }
-    *readptr++ = ch;
-    if (last) {
-    *readptr++ = 0x4b;
-    *readptr++ = 0x00;
-    *readptr++ = 0x01;
-    }
-    memcpy(readptr, hdr4b, sizeof(hdr4b));
-    readptr += sizeof(hdr4b);
-    *(readptr-1) |= (0x80 & ch);
-}
 static unsigned char filebuffer[10000];
-static void indata(int len, int rlen, unsigned char *ptrin)
+static void outbuffer(struct ftdi_context *ftdi)
+{
+    printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
+    writetc = ftdi_write_data_submit(ftdi, readbuffer, readptr - readbuffer);
+    ftdi_transfer_data_done(writetc);
+    writetc = NULL;
+    readptr = readbuffer;
+}
+static void indata(int len, int rlen, unsigned char *ptrin, int addby)
 {
     int i;
                 for (i = 0; once && i < sizeof(bitswap); i++)
@@ -558,20 +547,33 @@ static void indata(int len, int rlen, unsigned char *ptrin)
     for (i = 0; i < rlen; i++)
         *readptr++ = bitswap[*ptrin++];
     rlen--;
-    if (rlen != len) {
-        rlen--;
-        p[0] = rlen;
-        p[1] = rlen >> 8;
-        add1byte(1, *--readptr);
+    if (rlen != len || addby) {
+        int last = 0;
+        unsigned char ch = 0;
+        if (rlen != len) {
+            rlen--;
+            p[0] = rlen;
+            p[1] = rlen >> 8;
+            last = 1;
+            ch = *--readptr;
+        }
+        else {
+            read(inputfd, readptr, 1);
+            ch = bitswap[*readptr];
+        }
+        *readptr++ = 0x1b;
+        *readptr++ = 0x06;
+        *readptr++ = ch;
+        if (last) {
+            *readptr++ = 0x4b;
+            *readptr++ = 0x00;
+            *readptr++ = 0x01;
+        }
+        memcpy(readptr, hdr4b, sizeof(hdr4b));
+        readptr += sizeof(hdr4b);
+        *(readptr-1) |= (0x80 & ch);
     }
-}
-static void outbuffer(struct ftdi_context *ftdi)
-{
-    printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
-    writetc = ftdi_write_data_submit(ftdi, readbuffer, readptr - readbuffer);
-    ftdi_transfer_data_done(writetc);
-    writetc = NULL;
-    readptr = readbuffer;
+    outbuffer(ctxitem0z);
 }
 int main()
 {
@@ -657,32 +659,31 @@ check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
 inputfd = open("mkPcieTop.bin", O_RDONLY);
 #define FILE_READSIZE 6463
-read(inputfd, filebuffer, FILE_READSIZE);
+unsigned char *pbuf = filebuffer;
+int rlen = read(inputfd, pbuf, FILE_READSIZE);
+{
 memcpy(readptr, hdr1, sizeof(hdr1));
 readptr += sizeof(hdr1);
-indata(4032, 4032+1, filebuffer);
-outbuffer(ctxitem0z); //4049
-indata(2429, 2429+1, filebuffer+4032+1);
-add1byte(0, 0); // 0x1b 0x06 0xvv, 0x4b 0x01 0x01
-outbuffer(ctxitem0z); //2439
+indata(4032, 4032+1, filebuffer, 0);
+rlen -= 4032+1;
+pbuf += 4032+1;
+}
+indata(rlen - 1, rlen, pbuf, 1);
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 while (1) {
-    int rlen = read(inputfd, filebuffer, FILE_READSIZE);
-    unsigned char *pbuf = filebuffer;
+    rlen = read(inputfd, filebuffer, FILE_READSIZE);
+    pbuf = filebuffer;
 
     {
         memcpy(readptr, hdr4b, sizeof(hdr4b));
         readptr += sizeof(hdr4b);
-        indata(4045, rlen > 4045+1 ? 4045+1 : rlen, filebuffer);
-        outbuffer(ctxitem0z); //4052
+        indata(4045, rlen > 4045+1 ? 4045+1 : rlen, filebuffer, 0);
         rlen -= 4045+1;
         pbuf += 4045+1;
     }
     if (rlen <= 0)
         break;
-    indata(2416, rlen, pbuf);
-    add1byte(0, 0); // 0x1b 0x06 0xvv
-    outbuffer(ctxitem0z); //2426
+    indata(2416, rlen, pbuf, 1);
 }
 
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
@@ -698,10 +699,7 @@ writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
 ftdi_transfer_data_done(writetc);
 writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
 check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
-writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
-check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
-for (j = 0; j < 3; j++)
-    test_pattern(ctxitem0z);
+test_different(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
 check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
