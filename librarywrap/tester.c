@@ -519,11 +519,22 @@ unsigned char hdr1[] = {
 static unsigned char hdr4b[] = {
       0x4b, 0x01, 0x01, 
 };
-static unsigned char readbuffer[BUFFER_MAX_LEN];
-static unsigned char *readptr = readbuffer;
 static void indata(int last, int rlen, unsigned char *ptrin, int limit_len)
 {
+static unsigned char readbuffer[BUFFER_MAX_LEN];
+    unsigned char *readptr = readbuffer;
     int i;
+
+    if (rlen == limit_len || last) {
+        if (limit_len == 4032) {
+            memcpy(readptr, hdr1, sizeof(hdr1));
+            readptr += sizeof(hdr1);
+        }
+        else {
+            memcpy(readptr, hdr4b, sizeof(hdr4b));
+            readptr += sizeof(hdr4b);
+        }
+    }
     *readptr++ = 0x19;
     unsigned char *p = readptr;
     readptr++; //length
@@ -551,7 +562,6 @@ static void indata(int last, int rlen, unsigned char *ptrin, int limit_len)
     writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
     ftdi_transfer_data_done(writetc);
     writetc = NULL;
-    readptr = readbuffer;
 }
 #define FILE_READSIZE 6464
 static unsigned char bitswap[256];
@@ -656,19 +666,9 @@ int limit_len = 4032;
 while (1) {
     unsigned char *pbuf = filebuffer;
     int rlen = read_next_part();
-    {
-        if (limit_len == 4032) {
-            memcpy(readptr, hdr1, sizeof(hdr1));
-            readptr += sizeof(hdr1);
-        }
-        else {
-            memcpy(readptr, hdr4b, sizeof(hdr4b));
-            readptr += sizeof(hdr4b);
-        }
-        indata(rlen <= limit_len, rlen > limit_len ? limit_len : rlen-1, filebuffer, limit_len);
-        rlen -= limit_len+1;
-        pbuf += limit_len+1;
-    }
+    indata(rlen <= limit_len, rlen > limit_len ? limit_len : rlen-1, filebuffer, limit_len);
+    rlen -= limit_len+1;
+    pbuf += limit_len+1;
     if (rlen <= 0)
         break;
     indata(0, rlen-1, pbuf, limit_len);
