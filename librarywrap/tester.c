@@ -26,15 +26,7 @@ static unsigned char command_ab[] = { 0xab, 0x87, };
 static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
 static unsigned char item14z[] = { TMSW, 0x02, 0x07, };
 static unsigned char errorcode_fa[] = { 0xfa, };
-static unsigned char readdata1z[] = { 0xaa, };
-static unsigned char readdata2z[] = { 0xab, };
-static unsigned char readdata7z[] = { 0xaf, 0xf5, };
 static unsigned char readdata8z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x0f, };
-static unsigned char readdata9z[] = { 0x88, 0x44, };
-static unsigned char readdata10z[] = { 0x8a, 0x45, };
-static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
-static unsigned char readdata12z[] = { 0xac, 0xd6, };
-static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
 #define BUFFER_MAX_LEN 1000000
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
@@ -214,10 +206,12 @@ int main()
     for (i = 0; i < 4; i++) {
         ftdi_write_data(ctxitem0z, command_aa, sizeof(command_aa));
         ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
+static unsigned char readdata1z[] = { 0xaa, };
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
     }
     ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
     ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
+static unsigned char readdata2z[] = { 0xab, };
     ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
 static unsigned char initialize_sequence[] = {
@@ -326,6 +320,7 @@ static unsigned char item12z[] = {
      TMSR, 0x02, 0x83, 
      0x87, 
 };
+static unsigned char readdata7z[] = { 0xaf, 0xf5, };
         writetc = ftdi_write_data_submit(ctxitem0z, item12z, sizeof(item12z));
         check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
     }
@@ -387,6 +382,7 @@ static unsigned char item15z[] = {
      TMSR, 0x00, 0x01, 
      0x87, 
 };
+static unsigned char readdata9z[] = { 0x88, 0x44, };
     writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
     check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
 
@@ -397,6 +393,7 @@ static unsigned char item16z[] = {
      TMSR, 0x00, 0x01, 
      0x87, 
 };
+static unsigned char readdata10z[] = { 0x8a, 0x45, };
     writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
     check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
@@ -514,6 +511,7 @@ static unsigned char item17z[] = {
      TMSR, 0x00, 0x01, 
      0x87, 
 };
+static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
     writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
     check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
 
@@ -548,6 +546,7 @@ static unsigned char item18z[] = {
      TMSR, 0x00, 0x81, 
      0x87, 
 };
+static unsigned char readdata12z[] = { 0xac, 0xd6, };
     writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
     check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
 
@@ -592,6 +591,7 @@ static unsigned char item19z[] = {
      TMSR, 0x00, 0x01, 
      0x87, 
 };
+static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
     writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
     check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
 
