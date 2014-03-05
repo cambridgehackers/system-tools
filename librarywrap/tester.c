@@ -396,8 +396,6 @@ static unsigned char item22z[] = {
 };
 static int inputfd;
 #define BUFFER_MAX_LEN 1000000
-static unsigned char readbuffer[BUFFER_MAX_LEN];
-static unsigned char *readptr = readbuffer;
 
 void foo(void)
 {
@@ -521,9 +519,9 @@ unsigned char hdr1[] = {
 static unsigned char hdr4b[] = {
       0x4b, 0x01, 0x01, 
 };
-static unsigned char bitswap[256];
-static unsigned char filebuffer[10000];
-static void indata(int len, int rlen, unsigned char *ptrin, int limit_len)
+static unsigned char readbuffer[BUFFER_MAX_LEN];
+static unsigned char *readptr = readbuffer;
+static void indata(int last, int rlen, unsigned char *ptrin, int limit_len)
 {
     int i;
     *readptr++ = 0x19;
@@ -532,20 +530,20 @@ static void indata(int len, int rlen, unsigned char *ptrin, int limit_len)
     readptr++; //length
     for (i = 0; i <= rlen; i++)
         *readptr++ = *ptrin++;
-    if (rlen != len || rlen < limit_len) {
+    if (last || rlen < limit_len) {
         unsigned char ch = *--readptr;
         rlen--;
         *readptr++ = 0x1b;
         *readptr++ = 0x06;
         *readptr++ = ch;
-        if (rlen+1 != len) {
+        if (last) {
             *readptr++ = 0x4b;
             *readptr++ = 0x00;
             *readptr++ = 0x01;
         }
-        memcpy(readptr, hdr4b, sizeof(hdr4b));
-        readptr += sizeof(hdr4b);
-        *(readptr-1) |= (0x80 & ch);
+        *readptr++ = 0x4b;
+        *readptr++ = 0x01;
+        *readptr++ = 0x01 | (0x80 & ch);
     }
     p[0] = rlen;
     p[1] = rlen >> 8;
@@ -556,6 +554,8 @@ static void indata(int len, int rlen, unsigned char *ptrin, int limit_len)
     readptr = readbuffer;
 }
 #define FILE_READSIZE 6464
+static unsigned char bitswap[256];
+static unsigned char filebuffer[10000];
 static int read_next_part(void)
 {
     int i;
@@ -665,13 +665,13 @@ while (1) {
             memcpy(readptr, hdr4b, sizeof(hdr4b));
             readptr += sizeof(hdr4b);
         }
-        indata(limit_len, rlen > limit_len ? limit_len : rlen-1, filebuffer, limit_len);
+        indata(rlen <= limit_len, rlen > limit_len ? limit_len : rlen-1, filebuffer, limit_len);
         rlen -= limit_len+1;
         pbuf += limit_len+1;
     }
     if (rlen <= 0)
         break;
-    indata(rlen - 1, rlen-1, pbuf, limit_len);
+    indata(0, rlen-1, pbuf, limit_len);
     limit_len = 4045;
 }
 
