@@ -1,9 +1,11 @@
 WRAP: ftdi_init
     fprintf(logfile, "\n%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+printf("inimasterftdi %p\n", master_ftdi);
     if (!master_ftdi)
         master_ftdi = ftdi;
     //end_datafile();
 WRAP: ftdi_deinit
+printf("deinimasterftdi %p ftdi %p\n", master_ftdi, ftdi);
     fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
     if (master_ftdi == ftdi)
         final_dump();
@@ -29,9 +31,12 @@ WRAP: ftdi_list_free
 //void ftdi_list_free(struct ftdi_device_list **devlist)
     fprintf(logfile, "%s(%p);\n", __FUNCTION__, devlist);
 WRAP: ftdi_new
+    fprintf(logfile, "//%s() starting\n", __FUNCTION__);
 POST:
     fprintf(logfile, "//%p\n%s = %s();\n", retval, translate_context(retval), __FUNCTION__);
     dump_context(retval);
+    if (datafile_fd < 0)
+        datafile_fd = creat("/tmp/xx.datafile", 0666);
 WRAP: ftdi_read_data
 //int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int size)
 POST:
@@ -128,7 +133,7 @@ POST:
     if (retval)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_purge_tx_buffer
-    fprintf(logfile, "%s(%p);\n", __FUNCTION__, translate_context(ftdi));
+    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
     if (retval)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);

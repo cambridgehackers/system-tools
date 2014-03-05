@@ -5,3 +5,6 @@ CFLAGS=-Wall -fPIC -I/usr/local/include -g
 %.so: %.o
 	gcc -fPIC -shared $(CFLAGS) $< /lib/x86_64-linux-gnu/libdl-2.15.so -o $@
 #/usr/lib32/libdl.a -o $@
+
+tester: tester.o ftdiwrap.o Makefile
+	gcc -g -o tester tester.o ftdiwrap.o -ldl -lpthread
