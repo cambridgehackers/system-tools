@@ -523,21 +523,18 @@ static unsigned char hdr4b[] = {
 };
 static unsigned char bitswap[256];
 static unsigned char filebuffer[10000];
-static void indata(int len, int rlen, unsigned char *ptrin, int addby)
+static void indata(int len, int rlen, unsigned char *ptrin, int limit_len)
 {
     int i;
     *readptr++ = 0x19;
     unsigned char *p = readptr;
-    *readptr++ = len;
-    *readptr++ = len >> 8;
-    for (i = 0; i < rlen; i++)
+    readptr++; //length
+    readptr++; //length
+    for (i = 0; i <= rlen; i++)
         *readptr++ = *ptrin++;
-    rlen--;
-    if (rlen != len || addby) {
+    if (rlen != len || rlen < limit_len) {
         unsigned char ch = *--readptr;
         rlen--;
-        p[0] = rlen;
-        p[1] = rlen >> 8;
         *readptr++ = 0x1b;
         *readptr++ = 0x06;
         *readptr++ = ch;
@@ -550,6 +547,8 @@ static void indata(int len, int rlen, unsigned char *ptrin, int addby)
         readptr += sizeof(hdr4b);
         *(readptr-1) |= (0x80 & ch);
     }
+    p[0] = rlen;
+    p[1] = rlen >> 8;
     printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
     writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
     ftdi_transfer_data_done(writetc);
@@ -653,12 +652,12 @@ check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
            | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
            | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
 inputfd = open("mkPcieTop.bin", O_RDONLY);
-int limit_len = 4032+1;
+int limit_len = 4032;
 while (1) {
     unsigned char *pbuf = filebuffer;
     int rlen = read_next_part();
     {
-        if (limit_len == 4032+1) {
+        if (limit_len == 4032) {
             memcpy(readptr, hdr1, sizeof(hdr1));
             readptr += sizeof(hdr1);
         }
@@ -666,14 +665,14 @@ while (1) {
             memcpy(readptr, hdr4b, sizeof(hdr4b));
             readptr += sizeof(hdr4b);
         }
-        indata(limit_len - 1, rlen > limit_len ? limit_len : rlen, filebuffer, 0);
-        rlen -= limit_len;
-        pbuf += limit_len;
+        indata(limit_len, rlen > limit_len ? limit_len : rlen-1, filebuffer, limit_len);
+        rlen -= limit_len+1;
+        pbuf += limit_len+1;
     }
     if (rlen <= 0)
         break;
-    indata(rlen - 1, rlen, pbuf, 1);
-    limit_len = 4045+1;
+    indata(rlen - 1, rlen-1, pbuf, limit_len);
+    limit_len = 4045;
 }
 
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
