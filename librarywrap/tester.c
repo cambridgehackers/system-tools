@@ -524,14 +524,6 @@ static unsigned char hdr4b[] = {
 static unsigned char bitswap[256];
 static int once = 1;
 static unsigned char filebuffer[10000];
-static void outbuffer(struct ftdi_context *ftdi)
-{
-    printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
-    writetc = ftdi_write_data_submit(ftdi, readbuffer, readptr - readbuffer);
-    ftdi_transfer_data_done(writetc);
-    writetc = NULL;
-    readptr = readbuffer;
-}
 static void indata(int len, int rlen, unsigned char *ptrin, int addby)
 {
     int i;
@@ -548,23 +540,14 @@ static void indata(int len, int rlen, unsigned char *ptrin, int addby)
         *readptr++ = bitswap[*ptrin++];
     rlen--;
     if (rlen != len || addby) {
-        int last = 0;
-        unsigned char ch = 0;
-        if (rlen != len) {
-            rlen--;
-            p[0] = rlen;
-            p[1] = rlen >> 8;
-            last = 1;
-            ch = *--readptr;
-        }
-        else {
-            read(inputfd, readptr, 1);
-            ch = bitswap[*readptr];
-        }
+        unsigned char ch = *--readptr;
+        rlen--;
+        p[0] = rlen;
+        p[1] = rlen >> 8;
         *readptr++ = 0x1b;
         *readptr++ = 0x06;
         *readptr++ = ch;
-        if (last) {
+        if (rlen+1 != len) {
             *readptr++ = 0x4b;
             *readptr++ = 0x00;
             *readptr++ = 0x01;
@@ -573,7 +556,11 @@ static void indata(int len, int rlen, unsigned char *ptrin, int addby)
         readptr += sizeof(hdr4b);
         *(readptr-1) |= (0x80 & ch);
     }
-    outbuffer(ctxitem0z);
+    printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
+    writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
+    ftdi_transfer_data_done(writetc);
+    writetc = NULL;
+    readptr = readbuffer;
 }
 int main()
 {
@@ -658,7 +645,7 @@ writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
 check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
 inputfd = open("mkPcieTop.bin", O_RDONLY);
-#define FILE_READSIZE 6463
+#define FILE_READSIZE 6464
 unsigned char *pbuf = filebuffer;
 int rlen = read(inputfd, pbuf, FILE_READSIZE);
 {
@@ -683,7 +670,7 @@ while (1) {
     }
     if (rlen <= 0)
         break;
-    indata(2416, rlen, pbuf, 1);
+    indata(rlen - 1, rlen, pbuf, 1);
 }
 
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
