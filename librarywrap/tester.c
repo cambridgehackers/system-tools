@@ -52,9 +52,6 @@
 #define DATAW_BYTES_LEN(A) 0x19, \
     (((A)-1) & 0xff), (((A)-1) >> 8)
 
-static unsigned char command_aa[] = { 0xaa, 0x87, };
-static unsigned char command_ab[] = { 0xab, 0x87, };
-static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
 static unsigned char item14z[] = { TMSW, 0x02, 0x07, };
 static unsigned char errorcode_fa[] = { 0xfa, };
 static unsigned char readdata8z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x0f, };
@@ -202,11 +199,13 @@ int main()
     ftdi_usb_purge_tx_buffer(ctxitem0z);
 
     for (i = 0; i < 4; i++) {
+static unsigned char command_aa[] = { 0xaa, 0x87, };
         ftdi_write_data(ctxitem0z, command_aa, sizeof(command_aa));
         ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
 static unsigned char readdata1z[] = { 0xaa, };
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
     }
+static unsigned char command_ab[] = { 0xab, 0x87, };
     ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
     ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
 static unsigned char readdata2z[] = { 0xab, };
@@ -235,6 +234,7 @@ static unsigned char item8z[] = {
 };
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
+static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
     ftdi_write_data(ctxitem0z, command_86, sizeof(command_86));
 
 static unsigned char item10z[] = {
