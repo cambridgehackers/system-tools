@@ -492,6 +492,18 @@ struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, buf, size);
 ftdi_transfer_data_done(tc);
 //printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 }
+static void test_pattern(struct ftdi_context *ftdi)
+{
+int i;
+    writetc = ftdi_write_data_submit(ftdi, item5z, sizeof(item5z));
+    check_ftdi_read_data_submit(ftdi, readdata4z, sizeof(readdata4z));
+    writetc = ftdi_write_data_submit(ftdi, item6z, sizeof(item6z));
+    check_ftdi_read_data_submit(ftdi, readdata4z, sizeof(readdata4z));
+    for (i = 0; i < 2; i++) {
+        writetc = ftdi_write_data_submit(ftdi, item7z, sizeof(item7z));
+        check_ftdi_read_data_submit(ftdi, readdata4z, sizeof(readdata4z));
+    }
+}
 unsigned char hdr1[] = {
       0x4b, 0x01, 0x01, 
       0x4b, 0x02, 0x01, 
@@ -558,7 +570,7 @@ static void outbuffer(struct ftdi_context *ftdi)
 }
 int main()
 {
-int i;
+int i, j;
     struct ftdi_device_list *devlist, *curdev;
     //char manufacturer[128], description[128];
 
@@ -620,64 +632,12 @@ check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
 
 writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 4; j++)
+    test_pattern(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 3; j++)
+    test_pattern(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
 ftdi_transfer_data_done(writetc);
 ftdi_write_data(ctxitem0z, item9z, sizeof(item9z));
@@ -694,108 +654,20 @@ check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
 writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 3; j++)
+    test_pattern(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 3; j++)
+    test_pattern(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 3; j++)
+    test_pattern(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 0; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 3; j++)
+    test_pattern(ctxitem0z);
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
 check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
@@ -803,15 +675,6 @@ printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
 check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-     //4b, 01, 01, 
-     //4b, 02, 01, 
-     //19, 03, 00, 
-          //00, 00, 00, 00, 
-     //19, c0, 0f, 
-          //ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, 
-          //ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, ff, 
-          //00, 00, 00, dd, 88, 44, 00, 22, ff, ff, ff, ff, ff, ff, ff, ff, 
-          //55, 99, aa, 66, 04, 00, 00, 00, 0c, 40, 04, 80, 00, 00, 00, 00, 
 inputfd = open("mkPcieTop.bin", O_RDONLY);
 memcpy(readptr, hdr1, sizeof(hdr1));
 readptr += sizeof(hdr1);
@@ -850,30 +713,8 @@ writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
 check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
 writetc = ftdi_write_data_submit(ctxitem0z, item4z, sizeof(item4z));
 check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z));
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 1; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 1; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
-writetc = ftdi_write_data_submit(ctxitem0z, item5z, sizeof(item5z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-writetc = ftdi_write_data_submit(ctxitem0z, item6z, sizeof(item6z));
-check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-for (i = 1; i < 2; i++) {
-    writetc = ftdi_write_data_submit(ctxitem0z, item7z, sizeof(item7z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata4z, sizeof(readdata4z));
-}
+for (j = 0; j < 3; j++)
+    test_pattern(ctxitem0z);
 writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
 check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
