@@ -521,72 +521,6 @@ static unsigned char hdr4b[] = {
 };
 #define FILE_READSIZE 6464
 static unsigned char bitswap[256];
-static unsigned char filebuffer[10000];
-static int read_next_part(void)
-{
-    int i;
-    int rlen = read(inputfd, filebuffer, FILE_READSIZE);
-    for (i = 0; i < rlen; i++)
-        filebuffer[i] = bitswap[filebuffer[i]];
-    return rlen;
-}
-static int indata(int limit_len)
-{
-static unsigned char readbuffer[BUFFER_MAX_LEN];
-    unsigned char *ptrin = filebuffer;
-    unsigned char *readptr;
-    int i;
-    int rlen;
-    int argrlen = read_next_part();
-    int last = (argrlen <= limit_len);
-    argrlen--;
-again:
-    readptr = readbuffer;
-    rlen = argrlen;
-    if (rlen > limit_len)
-        rlen = limit_len;
-    if (rlen == limit_len || last) {
-        if (limit_len == 4032) {
-            memcpy(readptr, hdr1, sizeof(hdr1));
-            readptr += sizeof(hdr1);
-        }
-        else {
-            memcpy(readptr, hdr4b, sizeof(hdr4b));
-            readptr += sizeof(hdr4b);
-        }
-    }
-    *readptr++ = 0x19;
-    unsigned char *p = readptr;
-    readptr++; //length
-    readptr++; //length
-    for (i = 0; i <= rlen; i++)
-        *readptr++ = *ptrin++;
-    if (last || rlen < limit_len) {
-        unsigned char ch = *--readptr;
-        rlen--;
-        *readptr++ = 0x1b;
-        *readptr++ = 0x06;
-        *readptr++ = ch;
-        if (last) {
-            *readptr++ = 0x4b;
-            *readptr++ = 0x00;
-            *readptr++ = 0x01;
-        }
-        *readptr++ = 0x4b;
-        *readptr++ = 0x01;
-        *readptr++ = 0x01 | (0x80 & ch);
-    }
-    p[0] = rlen;
-    p[1] = rlen >> 8;
-    printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
-    writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
-    ftdi_transfer_data_done(writetc);
-    writetc = NULL;
-    argrlen -= limit_len+1;
-    if (!last && argrlen > 0)
-        goto again;
-    return last;
-}
 int main()
 {
 int i, j, k;
@@ -677,10 +611,65 @@ check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 inputfd = open("mkPcieTop.bin", O_RDONLY);
 int limit_len = 4032;
 while (1) {
-    if (indata(limit_len))
-        break;
+    static unsigned char readbuffer[BUFFER_MAX_LEN];
+    static unsigned char filebuffer[10000];
+    unsigned char *ptrin = filebuffer;
+    int i;
+
+    int argrlen = read(inputfd, filebuffer, FILE_READSIZE);
+    int last = (argrlen < FILE_READSIZE);
+    for (i = 0; i < argrlen; i++)
+        filebuffer[i] = bitswap[filebuffer[i]];
+    argrlen--;
+    while (argrlen > 0) {
+        unsigned char *readptr = readbuffer;
+        int rlen = argrlen;
+        if (rlen > limit_len)
+            rlen = limit_len;
+        if (rlen == limit_len || last) {
+            if (limit_len == 4032) {
+                memcpy(readptr, hdr1, sizeof(hdr1));
+                readptr += sizeof(hdr1);
+            }
+            else {
+                memcpy(readptr, hdr4b, sizeof(hdr4b));
+                readptr += sizeof(hdr4b);
+            }
+        }
+        *readptr++ = 0x19;
+        unsigned char *p = readptr;
+        readptr++; //length
+        readptr++; //length
+        for (i = 0; i <= rlen; i++)
+            *readptr++ = *ptrin++;
+        if (last || rlen < limit_len) {
+            unsigned char ch = *--readptr;
+            rlen--;
+            *readptr++ = 0x1b;
+            *readptr++ = 0x06;
+            *readptr++ = ch;
+            if (last) {
+                *readptr++ = 0x4b;
+                *readptr++ = 0x00;
+                *readptr++ = 0x01;
+            }
+            *readptr++ = 0x4b;
+            *readptr++ = 0x01;
+            *readptr++ = 0x01 | (0x80 & ch);
+        }
+        p[0] = rlen;
+        p[1] = rlen >> 8;
+        printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
+        writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
+        ftdi_transfer_data_done(writetc);
+        writetc = NULL;
+        argrlen -= limit_len+1;
+        if (last)
+            goto finished;
+    }
     limit_len = 4045;
 }
+finished:;
 
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
