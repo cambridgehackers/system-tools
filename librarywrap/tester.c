@@ -519,12 +519,32 @@ unsigned char hdr1[] = {
 static unsigned char hdr4b[] = {
       0x4b, 0x01, 0x01, 
 };
-static void indata(int last, int rlen, unsigned char *ptrin, int limit_len)
+#define FILE_READSIZE 6464
+static unsigned char bitswap[256];
+static unsigned char filebuffer[10000];
+static int read_next_part(void)
+{
+    int i;
+    int rlen = read(inputfd, filebuffer, FILE_READSIZE);
+    for (i = 0; i < rlen; i++)
+        filebuffer[i] = bitswap[filebuffer[i]];
+    return rlen;
+}
+static int indata(int limit_len)
 {
 static unsigned char readbuffer[BUFFER_MAX_LEN];
-    unsigned char *readptr = readbuffer;
+    unsigned char *ptrin = filebuffer;
+    unsigned char *readptr;
     int i;
-
+    int rlen;
+    int argrlen = read_next_part();
+    int last = (argrlen <= limit_len);
+    argrlen--;
+again:
+    readptr = readbuffer;
+    rlen = argrlen;
+    if (rlen > limit_len)
+        rlen = limit_len;
     if (rlen == limit_len || last) {
         if (limit_len == 4032) {
             memcpy(readptr, hdr1, sizeof(hdr1));
@@ -562,17 +582,10 @@ static unsigned char readbuffer[BUFFER_MAX_LEN];
     writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
     ftdi_transfer_data_done(writetc);
     writetc = NULL;
-}
-#define FILE_READSIZE 6464
-static unsigned char bitswap[256];
-static unsigned char filebuffer[10000];
-static int read_next_part(void)
-{
-    int i;
-    int rlen = read(inputfd, filebuffer, FILE_READSIZE);
-    for (i = 0; i < rlen; i++)
-        filebuffer[i] = bitswap[filebuffer[i]];
-    return rlen;
+    argrlen -= limit_len+1;
+    if (!last && argrlen > 0)
+        goto again;
+    return last;
 }
 int main()
 {
@@ -664,14 +677,8 @@ check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 inputfd = open("mkPcieTop.bin", O_RDONLY);
 int limit_len = 4032;
 while (1) {
-    unsigned char *pbuf = filebuffer;
-    int rlen = read_next_part();
-    indata(rlen <= limit_len, rlen > limit_len ? limit_len : rlen-1, filebuffer, limit_len);
-    rlen -= limit_len+1;
-    pbuf += limit_len+1;
-    if (rlen <= 0)
+    if (indata(limit_len))
         break;
-    indata(0, rlen-1, pbuf, limit_len);
     limit_len = 4045;
 }
 
