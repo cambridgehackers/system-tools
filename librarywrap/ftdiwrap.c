@@ -110,15 +110,12 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
         switch(ch) {
         case 0x85: case 0x87: case 0x8a: case 0xaa: case 0xab:
             break;
-        case 0x2e: case 0x3d:
+        case 0x2e:
             plen = 2;
             break;
-        case 0x19: case 0x1b: case 0x2c: case 0x3f: case 0x4b:
+        case 0x19: case 0x1b: case 0x2c: case 0x3d: case 0x3f: case 0x4b:
         case 0x6f: case 0x80: case 0x82: case 0x86: case 0x8f:
             plen = 3;
-            break;
-        case 0x00: case 0xff:
-            plen = 4;
             break;
         default:
             memdump(p-1, len, title);
@@ -130,7 +127,7 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
             write(datafile_fd, &bitswap[p[2]], 1);
         p += plen;
         len -= plen;
-        if (ch == 0x19) {
+        if (ch == 0x19 || ch == 0x3d) {
             unsigned tlen = (pstart[2] << 8 | pstart[1]) + 1;
             if (accum < ACCUM_LIMIT)
                 memdump(p, tlen > 64 ? 64 : tlen, "         ");
