@@ -522,22 +522,16 @@ static unsigned char hdr4b[] = {
       0x4b, 0x01, 0x01, 
 };
 static unsigned char bitswap[256];
-static int once = 1;
 static unsigned char filebuffer[10000];
 static void indata(int len, int rlen, unsigned char *ptrin, int addby)
 {
     int i;
-                for (i = 0; once && i < sizeof(bitswap); i++)
-                    bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
-                       | ((i &    4) << 3) | ((i &    8) << 1)
-                       | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
-                       | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
     *readptr++ = 0x19;
     unsigned char *p = readptr;
     *readptr++ = len;
     *readptr++ = len >> 8;
     for (i = 0; i < rlen; i++)
-        *readptr++ = bitswap[*ptrin++];
+        *readptr++ = *ptrin++;
     rlen--;
     if (rlen != len || addby) {
         unsigned char ch = *--readptr;
@@ -561,6 +555,15 @@ static void indata(int len, int rlen, unsigned char *ptrin, int addby)
     ftdi_transfer_data_done(writetc);
     writetc = NULL;
     readptr = readbuffer;
+}
+#define FILE_READSIZE 6464
+static int read_next_part(void)
+{
+    int i;
+    int rlen = read(inputfd, filebuffer, FILE_READSIZE);
+    for (i = 0; i < rlen; i++)
+        filebuffer[i] = bitswap[filebuffer[i]];
+    return rlen;
 }
 int main()
 {
@@ -644,33 +647,33 @@ check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
 writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
 check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
+    for (i = 0; i < sizeof(bitswap); i++)
+        bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
+           | ((i &    4) << 3) | ((i &    8) << 1)
+           | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
+           | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
 inputfd = open("mkPcieTop.bin", O_RDONLY);
-#define FILE_READSIZE 6464
-unsigned char *pbuf = filebuffer;
-int rlen = read(inputfd, pbuf, FILE_READSIZE);
-{
-memcpy(readptr, hdr1, sizeof(hdr1));
-readptr += sizeof(hdr1);
-indata(4032, 4032+1, filebuffer, 0);
-rlen -= 4032+1;
-pbuf += 4032+1;
-}
-indata(rlen - 1, rlen, pbuf, 1);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+int limit_len = 4032+1;
 while (1) {
-    rlen = read(inputfd, filebuffer, FILE_READSIZE);
-    pbuf = filebuffer;
-
+    unsigned char *pbuf = filebuffer;
+    int rlen = read_next_part();
     {
-        memcpy(readptr, hdr4b, sizeof(hdr4b));
-        readptr += sizeof(hdr4b);
-        indata(4045, rlen > 4045+1 ? 4045+1 : rlen, filebuffer, 0);
-        rlen -= 4045+1;
-        pbuf += 4045+1;
+        if (limit_len == 4032+1) {
+            memcpy(readptr, hdr1, sizeof(hdr1));
+            readptr += sizeof(hdr1);
+        }
+        else {
+            memcpy(readptr, hdr4b, sizeof(hdr4b));
+            readptr += sizeof(hdr4b);
+        }
+        indata(limit_len - 1, rlen > limit_len ? limit_len : rlen, filebuffer, 0);
+        rlen -= limit_len;
+        pbuf += limit_len;
     }
     if (rlen <= 0)
         break;
     indata(rlen - 1, rlen, pbuf, 1);
+    limit_len = 4045+1;
 }
 
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
