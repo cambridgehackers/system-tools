@@ -36,20 +36,20 @@
 
 #define IDCODE_VALUE 0x93, 0x10, 0x65, 0x43
 
-#define MREAD    (MPSSE_LSB|MPSSE_READ_NEG)
-#define MWRITE   (MPSSE_LSB|MPSSE_WRITE_NEG)
+#define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
+#define MWRITE  (MPSSE_LSB|MPSSE_WRITE_NEG)
 
-#define TMSW     (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE) // 4b
-#define TMSR     (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE) // 6f
-#define DATARW(A)  (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), /* 3d */ \
+#define TMSW    (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE)      //4b
+#define TMSR    (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
+#define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), /* 3d */ \
     (((A)-1) & 0xff), (((A)-1) >> 8)
       
-#define DATAR      (MPSSE_DO_READ               |MREAD) // 2c
-#define DATAWBIT   (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE) // 1b
-#define DATARBIT   (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE) // 2e
-#define DATARW_BIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE) // 3f
-#define DATAW_BYTES 0x19
-#define DATAW_BYTES_LEN(A) 0x19, \
+#define DATAR     (MPSSE_DO_READ               |MREAD)                     //2c
+#define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE)      //1b
+#define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE)       //2e
+#define DATARW_BIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE)//3f
+#define DATAW_BYTES        0x19
+#define DATAW_BYTES_LEN(A) DATAW_BYTES, \
     (((A)-1) & 0xff), (((A)-1) >> 8)
 
 static unsigned char item14z[] = { TMSW, 0x02, 0x07, };
@@ -308,27 +308,33 @@ static unsigned char readdata7z[] = { 0xaf, 0xf5, };
         check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
     }
 
-static unsigned char item13z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x00, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0xc5, 
-     TMSW, 0x02, 0x03, 
-     TMSW, 0x02, 0x01, 
-     DATAW_BYTES_LEN(19),
-          0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00,
-          0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00, 
-     DATAWBIT, 0x06, 0x00, 
-     TMSW, 0x02, 0x03, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0xc4, 
-     TMSW, 0x02, 0x03, 
-     TMSW, 0x02, 0x01, 
-     DATAR, 0x02, 0x00, 
-     DATARBIT, 0x06, 
-     TMSR, 0x02, 0x03, 
+#define SYNC_DATAW \
+     TMSW, 0x00, 0x00,  \
+     TMSW, 0x03, 0x03,  \
+     DATAWBIT, 0x04, 0xc5,  \
+     TMSW, 0x02, 0x03,  \
+     TMSW, 0x02, 0x01,  \
+     DATAW_BYTES_LEN(19), \
+          0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
+          0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
+     DATAWBIT, 0x06, 0x00,  \
+     TMSW, 0x02, 0x03,  \
+     TMSW, 0x03, 0x03,  \
+     DATAWBIT, 0x04, 0xc4,  \
+     TMSW, 0x02, 0x03,  \
+     TMSW, 0x02, 0x01,  \
+     DATAR, 0x02, 0x00,  \
+     DATARBIT, 0x06,  \
+     TMSR, 0x02, 0x03,  \
      0x87, 
-};
+static unsigned char item13z[] = {
+     TMSW, 0x02, 0x07,
+     SYNC_DATAW };
+static unsigned char item22z[] = {
+     TMSW, 0x02, 0x07, 
+     TMSW, 0x00, 0x7f, 
+     TMSW, 0x00, 0x01, 
+     SYNC_DATAW };
     writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
@@ -555,29 +561,6 @@ static unsigned char readdata14z[] = { 0xa9, 0xf5, };
     check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
     test_different(ctxitem0z);
 
-static unsigned char item22z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x01, 
-     TMSW, 0x00, 0x00, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0xc5, 
-     TMSW, 0x02, 0x03, 
-     TMSW, 0x02, 0x01, 
-     DATAW_BYTES_LEN(19),
-          0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00,
-          0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00, 
-     DATAWBIT, 0x06, 0x00, 
-     TMSW, 0x02, 0x03, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0xc4, 
-     TMSW, 0x02, 0x03, 
-     TMSW, 0x02, 0x01, 
-     DATAR, 0x02, 0x00, 
-     DATARBIT, 0x06, 
-     TMSR, 0x02, 0x03, 
-     0x87, 
-};
     writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 
