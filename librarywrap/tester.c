@@ -225,6 +225,11 @@ int main()
     char tempstr1z[128];
     char tempstr2z[64];
 
+    for (i = 0; i < sizeof(bitswap); i++)
+        bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
+           | ((i &    4) << 3) | ((i &    8) << 1)
+           | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
+           | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
     /*
      * Locate USB interface for JTAG
      */
@@ -345,9 +350,7 @@ int main()
         check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
     }
 
-    static unsigned char item13z[] = {
-         TMSW, 0x02, 0x07,
-         SYNC_PATTERN_SINGLE };
+    static unsigned char item13z[] = { TMSW, 0x02, 0x07, SYNC_PATTERN_SINGLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
@@ -360,6 +363,9 @@ int main()
     for (k = 0; k < 3; k++)
         test_different(ctxitem0z);
 
+    /*
+     * Enter programming mode
+     */
     static unsigned char item15z[] = {
          TMSW, 0x02, 0x07, 
          TMSW, 0x00, 0x7f, 
@@ -394,24 +400,20 @@ int main()
     writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
     check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
-    for (i = 0; i < sizeof(bitswap); i++)
-        bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
-           | ((i &    4) << 3) | ((i &    8) << 1)
-           | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
-           | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
     printf("Starting to send file\n");
-    inputfd = open("mkPcieTop.bin", O_RDONLY);
-    int limit_len = 4032;
-    int last = 0;
-    static unsigned char hdr1[] = {
+#define MAX_SINGLE_USB_DATA 4045
+    static unsigned char enter_shift_dr[] = {
           TMSW, 0x01, 0x01, 
           TMSW, 0x02, 0x01, 
           DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00, 
     };
+    inputfd = open("mkPcieTop.bin", O_RDONLY);
+    int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
+    int last = 0;
     static unsigned char readbuffer[BUFFER_MAX_LEN];
     unsigned char *readptr = readbuffer;
-    memcpy(readptr, hdr1, sizeof(hdr1));
-    readptr += sizeof(hdr1);
+    memcpy(readptr, enter_shift_dr, sizeof(enter_shift_dr));
+    readptr += sizeof(enter_shift_dr);
     writetc = NULL;
     while (!last) {
         static unsigned char filebuffer[10000];
@@ -456,7 +458,7 @@ int main()
                 break;
             readptr = readbuffer;
         }
-        limit_len = 4045;
+        limit_len = MAX_SINGLE_USB_DATA;
         *readptr++ = TMSW;
         *readptr++ = 0x01;
         *readptr++ = 0x01;
@@ -466,6 +468,9 @@ int main()
     writetc = NULL;
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
+    /*
+     * Done sending data, start programming
+     */
     static unsigned char item17z[] = {
          SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
          SET_LOW_DIRECTION(GPIO_10), 
@@ -485,20 +490,11 @@ int main()
          JTAG_IRREG(IRREG_JSTART),
          TMSW, 0x01, 0x01, 
          TMSW, 0x00, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
          TMSW, 0x01, 0x00, 
          JTAG_IRREG_RW(IRREG_BYPASS),
          0x87, 
