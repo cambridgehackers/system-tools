@@ -22,7 +22,9 @@
 
 //
 // FTDI interface documented at:
-// http://www.ftdichip.com/Documents/AppNotes/AN2232C-01_MPSSE_Cmnd.pdf
+//     http://www.ftdichip.com/Documents/AppNotes/AN2232C-01_MPSSE_Cmnd.pdf
+// Xilinx Series7 Configuation documented at:
+//     ug470_7Series_Config.pdf
 
 #include <stdio.h>
 #include <string.h>
@@ -44,7 +46,7 @@
 #define TMSRW   (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
 #define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), /* 3d */ \
     (((A)-1) & 0xff), (((A)-1) >> 8)
-      
+
 #define DATAR     (MPSSE_DO_READ               |MREAD)                     //2c
 #define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE)      //1b
 #define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE)       //2e
@@ -52,10 +54,12 @@
 #define DATAW_BYTES        0x19
 #define DATAW_BYTES_LEN(A) DATAW_BYTES, \
     (((A)-1) & 0xff), (((A)-1) >> 8)
+#define PULSE_CLOCK        0x8f
+#define SEND_IMMEDIATE     0x87
 
-#define GPIO_10   0x10
+#define GPIO_DONE   0x10
 #define GPIO_01   0x01
-#define SET_LOW_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
+#define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
 
 #define IRREG_JPROGRAM 0x0b
 #define IRREG_ISC_NOOP 0x14
@@ -83,7 +87,7 @@
      DATAR, 0x02, 0x00,  \
      DATARBIT, 0x06,  \
      TMSRW, 0x02, 0x03,  \
-     0x87
+     SEND_IMMEDIATE
 
 #define DATA_ITEM \
      TMSW, 0x03, 0x03,  \
@@ -103,7 +107,7 @@
      TMSW, 0x02, 0x03,  \
      EXTENDED_COMMAND(0xc4), \
      TMSW, 0x02, 0x01, \
-     COMMAND_ENDING,
+     COMMAND_ENDING
 
 #define SYNC_PATTERN(A,B) \
      JTAG_IRREG(IRREG_CFG_IN), \
@@ -128,7 +132,7 @@
      DATARW(3), 0x00, 0x00, 0x00,  \
      DATARWBIT, 0x06, 0x00,  \
      TMSRW, 0x00, 0x01,  \
-     0x87, 
+     SEND_IMMEDIATE
 
 #define PATTERN1 \
          0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, \
@@ -202,7 +206,7 @@ static void test_pattern(struct ftdi_context *ftdi)
      DATARW(63), PATTERN1, 0xff, 0x00, 0x00,  \
      DATARWBIT, 0x06, 0x00,  \
      TMSRW, 0x02, 0x03,  \
-     0x87, 
+     SEND_IMMEDIATE,
 static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
 static unsigned char readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00, };
 static void test_different(struct ftdi_context *ftdi)
@@ -270,26 +274,26 @@ int main()
      */
     static unsigned char errorcode_fa[] = { 0xfa, };
     for (i = 0; i < 4; i++) {
-        static unsigned char command_aa[] = { 0xaa, 0x87, };
+        static unsigned char command_aa[] = { 0xaa, SEND_IMMEDIATE, };
         ftdi_write_data(ctxitem0z, command_aa, sizeof(command_aa));
         ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
         static unsigned char readdata1z[] = { 0xaa, };
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
     }
-    static unsigned char command_ab[] = { 0xab, 0x87, };
+    static unsigned char command_ab[] = { 0xab, SEND_IMMEDIATE, };
     ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
     ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
     static unsigned char readdata2z[] = { 0xab, };
     ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
     static unsigned char initialize_sequence[] = {
-         0x85, 
-         0x8a, 
-         0x86, 0x01, 0x00, 
-         0x80, 0xe8, 0xeb, 
-         0x82, 0x20, 0x30, 
-         0x82, 0x30, 0x00, 
-         0x82, 0x00, 0x00, 
+         0x85,
+         0x8a,
+         0x86, 0x01, 0x00,
+         0x80, 0xe8, 0xeb,
+         0x82, 0x20, 0x30,
+         0x82, 0x30, 0x00,
+         0x82, 0x00, 0x00,
          TMSW, 0x04, 0x1f,   // go back to TMS reset state
     };
     ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
@@ -300,8 +304,8 @@ int main()
         test_different(ctxitem0z);
 
     static unsigned char item8z[] = {
-         TMSW, 0x02, 0x07, 
-         TMSW, 0x00, 0x7f, 
+         TMSW, 0x02, 0x07,
+         TMSW, 0x00, 0x7f,
     };
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
@@ -312,16 +316,16 @@ int main()
      * Step 5: Check Device ID
      */
     static unsigned char item10z[] = {
-         TMSW, 0x00, 0x01, 
-         TMSW, 0x00, 0x7f, 
-         TMSW, 0x00, 0x01, 
-         TMSW, 0x00, 0x7f, 
-         TMSW, 0x00, 0x00, 
-         TMSW, 0x02, 0x01, 
-         DATARW(0x7f), PATTERN2, 0xff, 0xff, 
-         DATARWBIT, 0x06, 0xff, 
-         TMSRW, 0x01, 0x81, 
-         0x87, 
+         TMSW, 0x00, 0x01,
+         TMSW, 0x00, 0x7f,
+         TMSW, 0x00, 0x01,
+         TMSW, 0x00, 0x7f,
+         TMSW, 0x00, 0x00,
+         TMSW, 0x02, 0x01,
+         DATARW(0x7f), PATTERN2, 0xff, 0xff,
+         DATARWBIT, 0x06, 0xff,
+         TMSRW, 0x01, 0x81,
+         SEND_IMMEDIATE,
     };
     static unsigned char readdata5z[] = { IDCODE_VALUE, PATTERN2, };
     writetc = ftdi_write_data_submit(ctxitem0z, item10z, sizeof(item10z));
@@ -329,8 +333,8 @@ int main()
 
     static unsigned char item11z[] = {
          TMSW, 0x04, 0x1f,   // go back to TMS reset state
-         TMSW, 0x00, 0x7f, 
-         TMSW, 0x00, 0x00, 
+         TMSW, 0x00, 0x7f,
+         TMSW, 0x00, 0x00,
          EXTENDED_COMMAND(0xc8),
          TMSW, 0x02, 0x01,
          COMMAND_ENDING,
@@ -340,10 +344,10 @@ int main()
     check_ftdi_read_data_submit(ctxitem0z, readdata_five_ff, sizeof(readdata_five_ff));
     for (i = 0; i < 3; i++) {
         static unsigned char item12z[] = {
-             TMSW, 0x03, 0x03, 
-             DATARWBIT, 0x04, 0xff, 
-             TMSRW, 0x02, 0x83, 
-             0x87, 
+             TMSW, 0x03, 0x03,
+             DATARWBIT, 0x04, 0xff,
+             TMSRW, 0x02, 0x83,
+             SEND_IMMEDIATE,
         };
         static unsigned char readdata7z[] = { 0xaf, 0xf5, };
         writetc = ftdi_write_data_submit(ctxitem0z, item12z, sizeof(item12z));
@@ -367,22 +371,22 @@ int main()
      * Enter programming mode
      */
     static unsigned char item15z[] = {
-         TMSW, 0x02, 0x07, 
-         TMSW, 0x00, 0x7f, 
-         TMSW, 0x00, 0x00, 
+         TMSW, 0x02, 0x07,
+         TMSW, 0x00, 0x7f,
+         TMSW, 0x00, 0x00,
          JTAG_IRREG(IRREG_JPROGRAM),
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
          JTAG_IRREG(IRREG_ISC_NOOP),
-         TMSW, 0x01, 0x01, 
-         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-         SET_LOW_DIRECTION(GPIO_10), 
-         0x8f, 0xff, 0xff, 
-         0x8f, 0xff, 0xff, 
-         0x8f, 0x6b, 0xdc, 
-         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-         SET_LOW_DIRECTION(GPIO_01), 
+         TMSW, 0x01, 0x01,
+         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
+         SET_LSB_DIRECTION(GPIO_DONE),
+         PULSE_CLOCK, 0xff, 0xff,
+         PULSE_CLOCK, 0xff, 0xff,
+         PULSE_CLOCK, 0x6b, 0xdc,
+         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
+         SET_LSB_DIRECTION(GPIO_01),
          JTAG_IRREG_RW(IRREG_ISC_NOOP),
-         0x87, 
+         SEND_IMMEDIATE,
     };
     static unsigned char readdata9z[] = { 0x88, 0x44, };
     writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
@@ -392,9 +396,9 @@ int main()
      * Step 6: Load Configuration Data Frames
      */
     static unsigned char item16z[] = {
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
          JTAG_IRREG_RW(IRREG_CFG_IN),
-         0x87, 
+         SEND_IMMEDIATE,
     };
     static unsigned char readdata10z[] = { 0x8a, 0x45, };
     writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
@@ -403,9 +407,9 @@ int main()
     printf("Starting to send file\n");
 #define MAX_SINGLE_USB_DATA 4045
     static unsigned char enter_shift_dr[] = {
-          TMSW, 0x01, 0x01, 
-          TMSW, 0x02, 0x01, 
-          DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00, 
+          TMSW, 0x01, 0x01,
+          TMSW, 0x02, 0x01,
+          DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00,
     };
     inputfd = open("mkPcieTop.bin", O_RDONLY);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
@@ -418,7 +422,7 @@ int main()
     while (!last) {
         static unsigned char filebuffer[10000];
         unsigned char *ptrin = filebuffer;
-    
+
         int remaining = read(inputfd, filebuffer, FILE_READSIZE);
         last = (remaining < FILE_READSIZE);
         for (i = 0; i < remaining; i++)
@@ -469,14 +473,14 @@ int main()
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
     /*
-     * Done sending data, start programming
+     * Step 8: Startup
      */
     static unsigned char item17z[] = {
-         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-         SET_LOW_DIRECTION(GPIO_10), 
-         0x8f, 0x3d, 0x49, 
-         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-         SET_LOW_DIRECTION(GPIO_01),
+         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
+         SET_LSB_DIRECTION(GPIO_DONE),
+         PULSE_CLOCK, 0x3d, 0x49,
+         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
+         SET_LSB_DIRECTION(GPIO_01),
          SYNC_PATTERN(0x40, 0x03)
     };
     static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
@@ -484,27 +488,27 @@ int main()
     check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
 
     static unsigned char item18z[] = {
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
          JTAG_IRREG(IRREG_BYPASS),
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
          JTAG_IRREG(IRREG_JSTART),
-         TMSW, 0x01, 0x01, 
-         TMSW, 0x00, 0x00, 
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, 
-         TMSW, 0x01, 0x00, 
+         TMSW, 0x01, 0x01,
+         TMSW, 0x00, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x01, 0x00,
          JTAG_IRREG_RW(IRREG_BYPASS),
-         0x87, 
+         SEND_IMMEDIATE,
     };
     static unsigned char readdata12z[] = { 0xac, 0xd6, };
     writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
     check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
 
     static unsigned char item19z[] = {
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
          SYNC_PATTERN(0x00, 0x07)
     };
     static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
@@ -512,21 +516,21 @@ int main()
     check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
 
     static unsigned char item20z[] = {
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
          JTAG_IRREG(IRREG_BYPASS),
-         TMSW, 0x01, 0x01, 
+         TMSW, 0x01, 0x01,
     };
     writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
     ftdi_transfer_data_done(writetc);
 
     static unsigned char item21z[] = {
-         TMSW, 0x02, 0x07, 
-         TMSW, 0x00, 0x7f, 
-         TMSW, 0x00, 0x00, 
-         TMSW, 0x03, 0x03, 
-         DATARWBIT, 0x04, 0xff, 
-         TMSRW, 0x02, 0x83, 
-         0x87, 
+         TMSW, 0x02, 0x07,
+         TMSW, 0x00, 0x7f,
+         TMSW, 0x00, 0x00,
+         TMSW, 0x03, 0x03,
+         DATARWBIT, 0x04, 0xff,
+         TMSRW, 0x02, 0x83,
+         SEND_IMMEDIATE,
     };
     static unsigned char readdata14z[] = { 0xa9, 0xf5, };
     writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
@@ -534,9 +538,9 @@ int main()
     test_different(ctxitem0z);
 
     static unsigned char item22z[] = {
-         TMSW, 0x02, 0x07, 
-         TMSW, 0x00, 0x7f, 
-         TMSW, 0x00, 0x01, 
+         TMSW, 0x02, 0x07,
+         TMSW, 0x00, 0x7f,
+         TMSW, 0x00, 0x01,
          SYNC_PATTERN_SINGLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
