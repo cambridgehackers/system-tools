@@ -222,18 +222,27 @@ static void test_idcode(struct ftdi_context *ftdi)
         test_pattern(ftdi);
 }
 
-static void check_idcode(struct ftdi_context *ftdi)
+static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
     static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
+    int j = 3, k = 2;
+
     writetc = ftdi_write_data_submit(ftdi, item3z, sizeof(item3z));
     check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+    if(instance) {
+        while (j-- > 0)
+            test_pattern(ftdi);
+        k = 3;
+    }
+    while (k-- > 0)
+        test_idcode(ftdi);
 }
 
 int main()
 {
     unsigned char bitswap[256];
     struct ftdi_context *ctxitem0z;
-    int i, j, k;
+    int i;
     struct ftdi_device_list *devlist, *curdev;
     char tempstr0z[64];
     char tempstr1z[128];
@@ -311,10 +320,7 @@ int main()
     };
     ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
 
-    check_idcode(ctxitem0z);
-    for (k = 0; k < 2; k++)
-        test_idcode(ctxitem0z);
-
+    check_idcode(ctxitem0z, 0);
     static unsigned char item8z[] = { TMSW, 0x02, 0x07, TMSW, 0x00, 0x7f, };
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
@@ -324,7 +330,7 @@ int main()
     /*
      * Step 5: Check Device ID
      */
-    static unsigned char item10z[] = {
+    static unsigned char read_idcode_ff[] = {
          TMSW, 0x00, 0x01,
          TMSW, 0x00, 0x7f,
          TMSW, 0x00, 0x01,
@@ -337,7 +343,7 @@ int main()
          SEND_IMMEDIATE,
     };
     static unsigned char readdata5z[] = { IDCODE_VALUE, PATTERN2, };
-    writetc = ftdi_write_data_submit(ctxitem0z, item10z, sizeof(item10z));
+    writetc = ftdi_write_data_submit(ctxitem0z, read_idcode_ff, sizeof(read_idcode_ff));
     check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
 
     static unsigned char item11z[] = {
@@ -369,11 +375,7 @@ int main()
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
     ftdi_transfer_data_done(writetc);
 
-    check_idcode(ctxitem0z);
-    for (j = 0; j < 3; j++)
-        test_pattern(ctxitem0z);
-    for (k = 0; k < 3; k++)
-        test_idcode(ctxitem0z);
+    check_idcode(ctxitem0z, 1);
 
     /*
      * Enter programming mode
