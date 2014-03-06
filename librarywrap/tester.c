@@ -53,6 +53,8 @@
 #define DATAW_BYTES_LEN(A) DATAW_BYTES, \
     (((A)-1) & 0xff), (((A)-1) >> 8)
 
+#define SET_LOW_DIRECTION(A) 0x80, 0xe0, (A)
+
 #define IRREG_JPROGRAM 0x0b
 #define IRREG_ISC_NOOP 0x14
 #define IRREG_CFG_IN   0x05
@@ -300,13 +302,34 @@ static unsigned char readdata7z[] = { 0xaf, 0xf5, };
      EXTENDED_COMMAND(0xc4), \
      TMSW, 0x02, 0x01, \
      COMMAND_ENDING,
+
+#define SYNC_PATTERN(A,B) \
+     JTAG_IRREG(IRREG_CFG_IN), \
+     TMSW, 0x01, 0x01,  \
+     TMSW, 0x02, 0x01,  \
+     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
+     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80,  \
+     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,  \
+     DATAWBIT, 0x06, 0x00,  \
+     TMSW, 0x00, 0x01,  \
+     TMSW, 0x01, 0x01,  \
+     JTAG_IRREG(IRREG_CFG_OUT), \
+     TMSW, 0x01, 0x01,  \
+     TMSW, 0x02, 0x01,  \
+     DATARW(3), 0x00, 0x00, 0x00,  \
+     DATARWBIT, 0x06, 0x00,  \
+     TMSRW, 0x00, 0x01,  \
+     0x87, 
+
 static unsigned char item13z[] = {
      TMSW, 0x02, 0x07,
-     SYNC_DATAW };
-static unsigned char item22z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x01, 
      SYNC_DATAW };
     writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
@@ -328,13 +351,13 @@ static unsigned char item15z[] = {
      TMSW, 0x01, 0x01, 
      JTAG_IRREG(IRREG_ISC_NOOP),
      TMSW, 0x01, 0x01, 
-     0x80, 0xe0, 0xfb, 
-     0x80, 0xe0, 0xfa, 
+     SET_LOW_DIRECTION(0xfb), 
+     SET_LOW_DIRECTION(0xfa), 
      0x8f, 0xff, 0xff, 
      0x8f, 0xff, 0xff, 
      0x8f, 0x6b, 0xdc, 
-     0x80, 0xe0, 0xfb, 
-     0x80, 0xe0, 0xeb, 
+     SET_LOW_DIRECTION(0xfb), 
+     SET_LOW_DIRECTION(0xeb), 
      JTAG_IRREG_RW(IRREG_ISC_NOOP),
      0x87, 
 };
@@ -423,36 +446,12 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
     writetc = NULL;
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
-#define SYNC_PATTERN(A,B) \
-     JTAG_IRREG(IRREG_CFG_IN), \
-     TMSW, 0x01, 0x01,  \
-     TMSW, 0x02, 0x01,  \
-     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
-     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80,  \
-     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,  \
-     TMSW, 0x00, 0x01,  \
-     TMSW, 0x01, 0x01,  \
-     JTAG_IRREG(IRREG_CFG_OUT), \
-     TMSW, 0x01, 0x01,  \
-     TMSW, 0x02, 0x01,  \
-     DATARW(3), 0x00, 0x00, 0x00,  \
-     DATARWBIT, 0x06, 0x00,  \
-     TMSRW, 0x00, 0x01,  \
-     0x87, 
 static unsigned char item17z[] = {
-     0x80, 0xe0, 0xfb, 
-     0x80, 0xe0, 0xfa, 
+     SET_LOW_DIRECTION(0xfb),
+     SET_LOW_DIRECTION(0xfa),
      0x8f, 0x3d, 0x49, 
-     0x80, 0xe0, 0xfb, 
-     0x80, 0xe0, 0xeb, 
+     SET_LOW_DIRECTION(0xfb),
+     SET_LOW_DIRECTION(0xeb),
      SYNC_PATTERN(0x40, 0x03)
 };
 static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
@@ -518,6 +517,11 @@ static unsigned char readdata14z[] = { 0xa9, 0xf5, };
     check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
     test_different(ctxitem0z);
 
+static unsigned char item22z[] = {
+     TMSW, 0x02, 0x07, 
+     TMSW, 0x00, 0x7f, 
+     TMSW, 0x00, 0x01, 
+     SYNC_DATAW };
     writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 
