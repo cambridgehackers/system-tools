@@ -53,7 +53,9 @@
 #define DATAW_BYTES_LEN(A) DATAW_BYTES, \
     (((A)-1) & 0xff), (((A)-1) >> 8)
 
-#define SET_LOW_DIRECTION(A) 0x80, 0xe0, (A)
+#define GPIO_10   0x10
+#define GPIO_01   0x01
+#define SET_LOW_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
 
 #define IRREG_JPROGRAM 0x0b
 #define IRREG_ISC_NOOP 0x14
@@ -89,6 +91,44 @@
      TMSW, 0x02, 0x83,  \
      EXTENDED_COMMAND(0xc3), \
      TMSW, 0x02, 0x01
+
+#define SYNC_PATTERN_SINGLE \
+     TMSW, 0x00, 0x00,  \
+     EXTENDED_COMMAND(0xc5), \
+     TMSW, 0x02, 0x01, \
+     DATAW_BYTES_LEN(19), \
+          0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
+          0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
+     DATAWBIT, 0x06, 0x00,  \
+     TMSW, 0x02, 0x03,  \
+     EXTENDED_COMMAND(0xc4), \
+     TMSW, 0x02, 0x01, \
+     COMMAND_ENDING,
+
+#define SYNC_PATTERN(A,B) \
+     JTAG_IRREG(IRREG_CFG_IN), \
+     TMSW, 0x01, 0x01,  \
+     TMSW, 0x02, 0x01,  \
+     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
+     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80,  \
+     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0,  \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,  \
+     DATAWBIT, 0x06, 0x00,  \
+     TMSW, 0x00, 0x01,  \
+     TMSW, 0x01, 0x01,  \
+     JTAG_IRREG(IRREG_CFG_OUT), \
+     TMSW, 0x01, 0x01,  \
+     TMSW, 0x02, 0x01,  \
+     DATARW(3), 0x00, 0x00, 0x00,  \
+     DATARWBIT, 0x06, 0x00,  \
+     TMSRW, 0x00, 0x01,  \
+     0x87, 
 
 #define PATTERN1 \
          0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, \
@@ -290,47 +330,9 @@ static unsigned char readdata7z[] = { 0xaf, 0xf5, };
         check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
     }
 
-#define SYNC_DATAW \
-     TMSW, 0x00, 0x00,  \
-     EXTENDED_COMMAND(0xc5), \
-     TMSW, 0x02, 0x01, \
-     DATAW_BYTES_LEN(19), \
-          0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
-          0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,  \
-     TMSW, 0x02, 0x03,  \
-     EXTENDED_COMMAND(0xc4), \
-     TMSW, 0x02, 0x01, \
-     COMMAND_ENDING,
-
-#define SYNC_PATTERN(A,B) \
-     JTAG_IRREG(IRREG_CFG_IN), \
-     TMSW, 0x01, 0x01,  \
-     TMSW, 0x02, 0x01,  \
-     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
-     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80,  \
-     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,  \
-     TMSW, 0x00, 0x01,  \
-     TMSW, 0x01, 0x01,  \
-     JTAG_IRREG(IRREG_CFG_OUT), \
-     TMSW, 0x01, 0x01,  \
-     TMSW, 0x02, 0x01,  \
-     DATARW(3), 0x00, 0x00, 0x00,  \
-     DATARWBIT, 0x06, 0x00,  \
-     TMSRW, 0x00, 0x01,  \
-     0x87, 
-
 static unsigned char item13z[] = {
      TMSW, 0x02, 0x07,
-     SYNC_DATAW };
+     SYNC_PATTERN_SINGLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
@@ -351,13 +353,13 @@ static unsigned char item15z[] = {
      TMSW, 0x01, 0x01, 
      JTAG_IRREG(IRREG_ISC_NOOP),
      TMSW, 0x01, 0x01, 
-     SET_LOW_DIRECTION(0xfb), 
-     SET_LOW_DIRECTION(0xfa), 
+     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+     SET_LOW_DIRECTION(GPIO_10), 
      0x8f, 0xff, 0xff, 
      0x8f, 0xff, 0xff, 
      0x8f, 0x6b, 0xdc, 
-     SET_LOW_DIRECTION(0xfb), 
-     SET_LOW_DIRECTION(0xeb), 
+     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+     SET_LOW_DIRECTION(GPIO_01), 
      JTAG_IRREG_RW(IRREG_ISC_NOOP),
      0x87, 
 };
@@ -447,11 +449,11 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
 static unsigned char item17z[] = {
-     SET_LOW_DIRECTION(0xfb),
-     SET_LOW_DIRECTION(0xfa),
+     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+     SET_LOW_DIRECTION(GPIO_10), 
      0x8f, 0x3d, 0x49, 
-     SET_LOW_DIRECTION(0xfb),
-     SET_LOW_DIRECTION(0xeb),
+     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+     SET_LOW_DIRECTION(GPIO_01),
      SYNC_PATTERN(0x40, 0x03)
 };
 static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
@@ -521,7 +523,7 @@ static unsigned char item22z[] = {
      TMSW, 0x02, 0x07, 
      TMSW, 0x00, 0x7f, 
      TMSW, 0x00, 0x01, 
-     SYNC_DATAW };
+     SYNC_PATTERN_SINGLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 
