@@ -363,6 +363,7 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
     unsigned char *readptr = readbuffer;
     memcpy(readptr, hdr1, sizeof(hdr1));
     readptr += sizeof(hdr1);
+    writetc = NULL;
     while (!last) {
         static unsigned char filebuffer[10000];
         unsigned char *ptrin = filebuffer;
@@ -398,9 +399,9 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
                 *readptr++ = 0x01 | (0x80 & ch); // 1 bit if data here
             }
             //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
+            if (writetc)
+                ftdi_transfer_data_done(writetc);
             writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
-            ftdi_transfer_data_done(writetc);
-            writetc = NULL;
             remaining -= limit_len+1;
             if (last)
                 break;
@@ -411,6 +412,9 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
         *readptr++ = 0x01;
         *readptr++ = 0x01;
     }
+    if (writetc)
+        ftdi_transfer_data_done(writetc);
+    writetc = NULL;
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
 #define SYNC_PATTERN(A,B) \
