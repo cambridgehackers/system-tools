@@ -129,8 +129,10 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
         len -= plen;
         if (ch == 0x19 || ch == 0x3d) {
             unsigned tlen = (pstart[2] << 8 | pstart[1]) + 1;
-            if (accum < ACCUM_LIMIT)
-                memdump(p, tlen > 64 ? 64 : tlen, "         ");
+            if (!submit)
+                memdump(p, tlen, "         ");
+            //else if (accum < ACCUM_LIMIT)
+            //    memdump(p, tlen > 64 ? 64 : tlen, "         ");
             if (submit && tlen > 4) {
                 int i;
                 for (i = 0; once && i < sizeof(bitswap); i++)
