@@ -28,6 +28,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/types.h>
@@ -238,7 +239,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
         test_idcode(ftdi);
 }
 
-int main()
+int main(int argc, char **argv)
 {
     unsigned char bitswap[256];
     struct ftdi_context *ctxitem0z;
@@ -248,6 +249,10 @@ int main()
     char tempstr1z[128];
     char tempstr2z[64];
 
+    if (argc != 2) {
+        printf("tester <filename>\n");
+        exit(1);
+    }
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
            | ((i &    4) << 3) | ((i &    8) << 1)
@@ -414,13 +419,13 @@ int main()
     writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
     check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
-    printf("Starting to send file\n");
+    printf("Starting to send file '%s'\n", argv[1]);
     static unsigned char enter_shift_dr[] = {
           TMSW, 0x01, 0x01,
           TMSW, 0x02, 0x01,
           DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00,
     };
-    inputfd = open("mkPcieTop.bin", O_RDONLY);
+    inputfd = open(argv[1], O_RDONLY);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
     int last = 0;
     static unsigned char readbuffer[BUFFER_MAX_LEN];
