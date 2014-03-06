@@ -91,13 +91,6 @@
      TMSRW, 0x02, 0x03,  \
      SEND_IMMEDIATE
 
-#define DATA_ITEM \
-     TMSW, 0x03, 0x03,  \
-     DATAWBIT, 0x04, 0xff,  \
-     TMSW, 0x02, 0x83,  \
-     EXTENDED_COMMAND(0xc3), \
-     TMSW, 0x02, 0x01
-
 #define SYNC_PATTERN_SINGLE \
      TMSW, 0x00, 0x00,  \
      EXTENDED_COMMAND(0xc5), \
@@ -158,8 +151,10 @@
          0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, \
          0xff, 0xff, 0xff, 0xff
 
+static unsigned char readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00, };
 static unsigned char item14z[] = { TMSW, 0x02, 0x07, };
 static unsigned char readdata8z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x0f, };
+
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
 
@@ -173,6 +168,13 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char
 
 static void test_pattern(struct ftdi_context *ftdi)
 {
+#define DATA_ITEM \
+     TMSW, 0x03, 0x03,  \
+     DATAWBIT, 0x04, 0xff,  \
+     TMSW, 0x02, 0x83,  \
+     EXTENDED_COMMAND(0xc3), \
+     TMSW, 0x02, 0x01
+
     static unsigned char item5z[] = { DATA_ITEM, COMMAND_ENDING, };
     static unsigned char item6z[] = {
          DATA_ITEM,
@@ -209,9 +211,8 @@ static void test_pattern(struct ftdi_context *ftdi)
      DATARWBIT, 0x06, 0x00,  \
      TMSRW, 0x02, 0x03,  \
      SEND_IMMEDIATE,
-static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
-static unsigned char readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00, };
-static void test_different(struct ftdi_context *ftdi)
+
+static void test_idcode(struct ftdi_context *ftdi)
 {
     static unsigned char item4z[] = { TMSW, 0x02, 0x07, IDTEST_PATTERN };
     int j;
@@ -220,6 +221,14 @@ static void test_different(struct ftdi_context *ftdi)
     for (j = 0; j < 3; j++)
         test_pattern(ftdi);
 }
+
+static void check_idcode(struct ftdi_context *ftdi)
+{
+    static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
+    writetc = ftdi_write_data_submit(ftdi, item3z, sizeof(item3z));
+    check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+}
+
 int main()
 {
     unsigned char bitswap[256];
@@ -260,7 +269,7 @@ int main()
     ftdi_get_eeprom_buf(ctxitem0z, fbuf, sizeof(fbuf));
 
     /*
-     * Generic initialization of FTDI interface
+     * Generic initialization of libftdi
      */
     ftdi_set_baudrate(ctxitem0z, 9600);
     ftdi_set_latency_timer(ctxitem0z, 255);
@@ -301,11 +310,10 @@ int main()
          TMSW, 0x04, 0x1f,   // go back to TMS reset state
     };
     ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
-    writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
 
+    check_idcode(ctxitem0z);
     for (k = 0; k < 2; k++)
-        test_different(ctxitem0z);
+        test_idcode(ctxitem0z);
 
     static unsigned char item8z[] = { TMSW, 0x02, 0x07, TMSW, 0x00, 0x7f, };
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
@@ -360,13 +368,12 @@ int main()
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
     ftdi_transfer_data_done(writetc);
-    writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
 
+    check_idcode(ctxitem0z);
     for (j = 0; j < 3; j++)
         test_pattern(ctxitem0z);
     for (k = 0; k < 3; k++)
-        test_different(ctxitem0z);
+        test_idcode(ctxitem0z);
 
     /*
      * Enter programming mode
@@ -532,7 +539,7 @@ int main()
     static unsigned char readdata14z[] = { 0xa9, 0xf5, };
     writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
     check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
-    test_different(ctxitem0z);
+    test_idcode(ctxitem0z);
 
     static unsigned char item22z[] = {
          TMSW, 0x02, 0x07,
