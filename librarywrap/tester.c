@@ -72,43 +72,43 @@
 #define IRREG_BYPASS   0x13f
 
 #define JTAG_IRREG(A) \
-     TMSW, 0x03, 0x03, \
+     TMSW, 0x03, 0x03, /* Idle -> Shift-IR */ \
      DATAWBIT, 0x04, (A) & 0xff, \
-     TMSW, 0x00, ((((A) & 0x100)>>1) | 0x01)
+     TMSW, 0x00, ((((A) & 0x100)>>1) | 0x01) /* Shift-IR -> Exit1-IR */
 
 #define JTAG_IRREG_RW(A) \
-     TMSW, 0x03, 0x03, \
+     TMSW, 0x03, 0x03, /* Idle -> Shift-IR */ \
      DATARWBIT, 0x04, (A) & 0xff, \
      TMSRW, 0x00, ((((A) & 0x100)>>1) | 0x01)
 
 #define EXTENDED_COMMAND(A) \
-     TMSW, 0x03, 0x03,  \
+     TMSW, 0x03, 0x03, /* Idle -> Shift-IR */ \
      DATAWBIT, 0x04, (A) & 0xff,  \
-     TMSW, 0x02, ((((A) & 0x100)>>1) | 0x03)
+     TMSW, 0x02, ((((A) & 0x100)>>1) | 0x03) /* Shift-IR -> Idle */
 
 #define COMMAND_ENDING \
      DATAR, 0x02, 0x00,  \
      DATARBIT, 0x06,  \
-     TMSRW, 0x02, 0x03,  \
+     TMSRW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */  \
      SEND_IMMEDIATE
 
 #define SYNC_PATTERN_SINGLE \
      TMSW, 0x00, 0x00,  \
      EXTENDED_COMMAND(0xc5), \
-     TMSW, 0x02, 0x01, \
+     TMSW, 0x02, 0x01, /* Idle -> Capture-DR */ \
      DATAW_BYTES_LEN(19), \
           0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
           0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,  \
-     TMSW, 0x02, 0x03,  \
+     TMSW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */  \
      EXTENDED_COMMAND(0xc4), \
-     TMSW, 0x02, 0x01, \
+     TMSW, 0x02, 0x01, /* Idle -> Capture-DR */ \
      COMMAND_ENDING
 
 #define SYNC_PATTERN(A,B) \
      JTAG_IRREG(IRREG_CFG_IN), \
-     TMSW, 0x01, 0x01,  \
-     TMSW, 0x02, 0x01,  \
+     TMSW, 0x01, 0x01,   /* Exit1/Exit2 -> Idle */ \
+     TMSW, 0x02, 0x01,   /* Idle -> Capture-DR */  \
      DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
      DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66,  \
      DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
@@ -121,10 +121,10 @@
      DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,  \
      TMSW, 0x00, 0x01,  \
-     TMSW, 0x01, 0x01,  \
+     TMSW, 0x01, 0x01,   /* Exit1/Exit2 -> Idle */ \
      JTAG_IRREG(IRREG_CFG_OUT), \
-     TMSW, 0x01, 0x01,  \
-     TMSW, 0x02, 0x01,  \
+     TMSW, 0x01, 0x01,   /* Exit1/Exit2 -> Idle */ \
+     TMSW, 0x02, 0x01,   /* Idle -> Capture-DR */  \
      DATARW(3), 0x00, 0x00, 0x00,  \
      DATARWBIT, 0x06, 0x00,  \
      TMSRW, 0x00, 0x01,  \
@@ -172,7 +172,7 @@ static void test_pattern(struct ftdi_context *ftdi)
 #define DATA_ITEM \
      EXTENDED_COMMAND(0x1ff), \
      EXTENDED_COMMAND(0xc3), \
-     TMSW, 0x02, 0x01
+     TMSW, 0x02, 0x01   /* Idle -> Capture-DR */
 
     static unsigned char item5z[] = { DATA_ITEM, COMMAND_ENDING, };
     static unsigned char item6z[] = {
@@ -184,8 +184,8 @@ static void test_pattern(struct ftdi_context *ftdi)
     static unsigned char item7z[] = {
          DATA_ITEM,
          DATAWBIT, 0x04, 0x0c,
-         TMSW, 0x02, 0x03,
-         TMSW, 0x02, 0x01,
+         TMSW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */
+         TMSW, 0x02, 0x01, /* Idle -> Capture-DR */
          DATAW_BYTES_LEN(1), 0x69,
          DATAWBIT, 0x01, 0x00,
          COMMAND_ENDING,
@@ -208,7 +208,7 @@ static void test_pattern(struct ftdi_context *ftdi)
      TMSW, 0x03, 0x02,  \
      DATARW(63), PATTERN1, 0xff, 0x00, 0x00,  \
      DATARWBIT, 0x06, 0x00,  \
-     TMSRW, 0x02, 0x03,  \
+     TMSRW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */  \
      SEND_IMMEDIATE,
 
 static void test_idcode(struct ftdi_context *ftdi)
@@ -339,7 +339,7 @@ int main(int argc, char **argv)
          TMSW, 0x00, 0x01,
          TMSW, 0x00, 0x7f,
          TMSW, 0x00, 0x00,
-         TMSW, 0x02, 0x01,
+         TMSW, 0x02, 0x01, /* Idle -> Capture-DR */
          DATARW(0x7f), PATTERN2, 0xff, 0xff,
          DATARWBIT, 0x06, 0xff,
          TMSRW, 0x01, 0x81,
@@ -354,7 +354,7 @@ int main(int argc, char **argv)
          TMSW, 0x00, 0x7f,
          TMSW, 0x00, 0x00,
          EXTENDED_COMMAND(0xc8),
-         TMSW, 0x02, 0x01,
+         TMSW, 0x02, 0x01, /* Idle -> Capture-DR */
          COMMAND_ENDING,
     };
     static unsigned char readdata_five_ff[] = { 0xff, 0xff, 0xff, 0xff, 0xff, };
@@ -388,9 +388,9 @@ int main(int argc, char **argv)
          TMSW, 0x00, 0x7f,
          TMSW, 0x00, 0x00,
          JTAG_IRREG(IRREG_JPROGRAM),
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
          JTAG_IRREG(IRREG_ISC_NOOP),
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_DONE),
          PULSE_CLOCK, 0xff, 0xff,
@@ -409,7 +409,7 @@ int main(int argc, char **argv)
      * Step 6: Load Configuration Data Frames
      */
     static unsigned char item16z[] = {
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
          JTAG_IRREG_RW(IRREG_CFG_IN),
          SEND_IMMEDIATE,
     };
@@ -419,8 +419,8 @@ int main(int argc, char **argv)
 
     printf("Starting to send file '%s'\n", argv[1]);
     static unsigned char enter_shift_dr[] = {
-          TMSW, 0x01, 0x01,
-          TMSW, 0x02, 0x01,
+          TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
+          TMSW, 0x02, 0x01,  /* Idle -> Capture-DR */
           DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00,
     };
     inputfd = open(argv[1], O_RDONLY);
@@ -500,12 +500,12 @@ int main(int argc, char **argv)
     check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
 
     static unsigned char item18z[] = {
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
          JTAG_IRREG(IRREG_BYPASS),
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
          JTAG_IRREG(IRREG_JSTART),
-         TMSW, 0x01, 0x01,
-         TMSW, 0x00, 0x00,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
+         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */
          TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
          TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
          TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
@@ -525,9 +525,9 @@ int main(int argc, char **argv)
     check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
 
     static unsigned char item20z[] = {
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
          JTAG_IRREG(IRREG_BYPASS),
-         TMSW, 0x01, 0x01,
+         TMSW, 0x01, 0x01,  /* Exit1/Exit2 -> Idle */
     };
     writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
     ftdi_transfer_data_done(writetc);
