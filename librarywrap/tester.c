@@ -167,24 +167,25 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char
 
 static void test_pattern(struct ftdi_context *ftdi)
 {
-static unsigned char item5z[] = { DATA_ITEM, COMMAND_ENDING, };
-static unsigned char item6z[] = {
-     DATA_ITEM,
-     DATAW_BYTES_LEN(1), 0x69,
-     DATAWBIT, 0x01, 0x00,
-     COMMAND_ENDING,
-};
-static unsigned char item7z[] = {
-     DATA_ITEM,
-     DATAWBIT, 0x04, 0x0c,
-     TMSW, 0x02, 0x03,
-     TMSW, 0x02, 0x01,
-     DATAW_BYTES_LEN(1), 0x69,
-     DATAWBIT, 0x01, 0x00,
-     COMMAND_ENDING,
-};
-static unsigned char readdata_five_zeros[] = { 0x00, 0x00, 0x00, 0x00, 0x00, };
-int i;
+    static unsigned char item5z[] = { DATA_ITEM, COMMAND_ENDING, };
+    static unsigned char item6z[] = {
+         DATA_ITEM,
+         DATAW_BYTES_LEN(1), 0x69,
+         DATAWBIT, 0x01, 0x00,
+         COMMAND_ENDING,
+    };
+    static unsigned char item7z[] = {
+         DATA_ITEM,
+         DATAWBIT, 0x04, 0x0c,
+         TMSW, 0x02, 0x03,
+         TMSW, 0x02, 0x01,
+         DATAW_BYTES_LEN(1), 0x69,
+         DATAWBIT, 0x01, 0x00,
+         COMMAND_ENDING,
+    };
+    static unsigned char readdata_five_zeros[] = { 0x00, 0x00, 0x00, 0x00, 0x00, };
+    int i;
+
     writetc = ftdi_write_data_submit(ftdi, item5z, sizeof(item5z));
     check_ftdi_read_data_submit(ftdi, readdata_five_zeros, sizeof(readdata_five_zeros));
     writetc = ftdi_write_data_submit(ftdi, item6z, sizeof(item6z));
@@ -203,10 +204,10 @@ int i;
      TMSRW, 0x02, 0x03,  \
      0x87, 
 static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
-static unsigned char item4z[] = { TMSW, 0x02, 0x07, IDTEST_PATTERN };
 static unsigned char readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00, };
 static void test_different(struct ftdi_context *ftdi)
 {
+    static unsigned char item4z[] = { TMSW, 0x02, 0x07, IDTEST_PATTERN };
     int j;
     writetc = ftdi_write_data_submit(ftdi, item4z, sizeof(item4z));
     check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
@@ -224,17 +225,22 @@ int main()
     char tempstr1z[128];
     char tempstr2z[64];
 
+    /*
+     * Locate USB interface for JTAG
+     */
     ctxitem0z = ftdi_new();
     ftdi_init(ctxitem0z);
     ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
     curdev = devlist;
     ftdi_usb_get_strings(ctxitem0z, curdev->dev, tempstr2z, sizeof(tempstr2z), tempstr1z, sizeof(tempstr1z), tempstr0z, sizeof(tempstr0z));
-
     printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, tempstr2z, tempstr1z, tempstr0z);
     ftdi_usb_open_dev(ctxitem0z, curdev->dev);
     ftdi_usb_reset(ctxitem0z);
     ftdi_list_free(&devlist);
 
+    /*
+     * Identify JTAG interface version
+     */
     int eeprom_val;
     unsigned char fbuf[256]; // since chiptype is 0x56, eerom size is 256
     ftdi_read_eeprom(ctxitem0z);
@@ -243,6 +249,9 @@ int main()
     printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
     ftdi_get_eeprom_buf(ctxitem0z, fbuf, sizeof(fbuf));
 
+    /*
+     * Generic initialization of FTDI interface
+     */
     ftdi_set_baudrate(ctxitem0z, 9600);
     ftdi_set_latency_timer(ctxitem0z, 255);
     ftdi_set_bitmode(ctxitem0z, 0, 0);
@@ -251,30 +260,33 @@ int main()
     ftdi_usb_purge_rx_buffer(ctxitem0z);
     ftdi_usb_purge_tx_buffer(ctxitem0z);
 
-static unsigned char errorcode_fa[] = { 0xfa, };
+    /*
+     * Step 4: Synchronization
+     */
+    static unsigned char errorcode_fa[] = { 0xfa, };
     for (i = 0; i < 4; i++) {
-static unsigned char command_aa[] = { 0xaa, 0x87, };
+        static unsigned char command_aa[] = { 0xaa, 0x87, };
         ftdi_write_data(ctxitem0z, command_aa, sizeof(command_aa));
         ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
-static unsigned char readdata1z[] = { 0xaa, };
+        static unsigned char readdata1z[] = { 0xaa, };
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
     }
-static unsigned char command_ab[] = { 0xab, 0x87, };
+    static unsigned char command_ab[] = { 0xab, 0x87, };
     ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
     ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
-static unsigned char readdata2z[] = { 0xab, };
+    static unsigned char readdata2z[] = { 0xab, };
     ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
-static unsigned char initialize_sequence[] = {
-     0x85, 
-     0x8a, 
-     0x86, 0x01, 0x00, 
-     0x80, 0xe8, 0xeb, 
-     0x82, 0x20, 0x30, 
-     0x82, 0x30, 0x00, 
-     0x82, 0x00, 0x00, 
-     TMSW, 0x04, 0x1f,   // go back to TMS reset state
-};
+    static unsigned char initialize_sequence[] = {
+         0x85, 
+         0x8a, 
+         0x86, 0x01, 0x00, 
+         0x80, 0xe8, 0xeb, 
+         0x82, 0x20, 0x30, 
+         0x82, 0x30, 0x00, 
+         0x82, 0x00, 0x00, 
+         TMSW, 0x04, 0x1f,   // go back to TMS reset state
+    };
     ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
     writetc = ftdi_write_data_submit(ctxitem0z, item3z, sizeof(item3z));
     check_ftdi_read_data_submit(ctxitem0z, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
@@ -282,57 +294,60 @@ static unsigned char initialize_sequence[] = {
     for (k = 0; k < 2; k++)
         test_different(ctxitem0z);
 
-static unsigned char item8z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x7f, 
-};
+    static unsigned char item8z[] = {
+         TMSW, 0x02, 0x07, 
+         TMSW, 0x00, 0x7f, 
+    };
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
-static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
+    static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
     ftdi_write_data(ctxitem0z, command_86, sizeof(command_86));
 
-static unsigned char item10z[] = {
-     TMSW, 0x00, 0x01, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x01, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x00, 
-     TMSW, 0x02, 0x01, 
-     DATARW(0x7f), PATTERN2, 0xff, 0xff, 
-     DATARWBIT, 0x06, 0xff, 
-     TMSRW, 0x01, 0x81, 
-     0x87, 
-};
+    /*
+     * Step 5: Check Device ID
+     */
+    static unsigned char item10z[] = {
+         TMSW, 0x00, 0x01, 
+         TMSW, 0x00, 0x7f, 
+         TMSW, 0x00, 0x01, 
+         TMSW, 0x00, 0x7f, 
+         TMSW, 0x00, 0x00, 
+         TMSW, 0x02, 0x01, 
+         DATARW(0x7f), PATTERN2, 0xff, 0xff, 
+         DATARWBIT, 0x06, 0xff, 
+         TMSRW, 0x01, 0x81, 
+         0x87, 
+    };
+    static unsigned char readdata5z[] = { IDCODE_VALUE, PATTERN2, };
     writetc = ftdi_write_data_submit(ctxitem0z, item10z, sizeof(item10z));
-static unsigned char readdata5z[] = { IDCODE_VALUE, PATTERN2, };
     check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
 
-static unsigned char item11z[] = {
-     TMSW, 0x04, 0x1f,   // go back to TMS reset state
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x00, 
-     EXTENDED_COMMAND(0xc8),
-     TMSW, 0x02, 0x01,
-     COMMAND_ENDING,
-};
-static unsigned char readdata_five_ff[] = { 0xff, 0xff, 0xff, 0xff, 0xff, };
+    static unsigned char item11z[] = {
+         TMSW, 0x04, 0x1f,   // go back to TMS reset state
+         TMSW, 0x00, 0x7f, 
+         TMSW, 0x00, 0x00, 
+         EXTENDED_COMMAND(0xc8),
+         TMSW, 0x02, 0x01,
+         COMMAND_ENDING,
+    };
+    static unsigned char readdata_five_ff[] = { 0xff, 0xff, 0xff, 0xff, 0xff, };
     writetc = ftdi_write_data_submit(ctxitem0z, item11z, sizeof(item11z));
     check_ftdi_read_data_submit(ctxitem0z, readdata_five_ff, sizeof(readdata_five_ff));
     for (i = 0; i < 3; i++) {
-static unsigned char item12z[] = {
-     TMSW, 0x03, 0x03, 
-     DATARWBIT, 0x04, 0xff, 
-     TMSRW, 0x02, 0x83, 
-     0x87, 
-};
-static unsigned char readdata7z[] = { 0xaf, 0xf5, };
+        static unsigned char item12z[] = {
+             TMSW, 0x03, 0x03, 
+             DATARWBIT, 0x04, 0xff, 
+             TMSRW, 0x02, 0x83, 
+             0x87, 
+        };
+        static unsigned char readdata7z[] = { 0xaf, 0xf5, };
         writetc = ftdi_write_data_submit(ctxitem0z, item12z, sizeof(item12z));
         check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
     }
 
-static unsigned char item13z[] = {
-     TMSW, 0x02, 0x07,
-     SYNC_PATTERN_SINGLE };
+    static unsigned char item13z[] = {
+         TMSW, 0x02, 0x07,
+         SYNC_PATTERN_SINGLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
@@ -345,34 +360,37 @@ static unsigned char item13z[] = {
     for (k = 0; k < 3; k++)
         test_different(ctxitem0z);
 
-static unsigned char item15z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x00, 
-     JTAG_IRREG(IRREG_JPROGRAM),
-     TMSW, 0x01, 0x01, 
-     JTAG_IRREG(IRREG_ISC_NOOP),
-     TMSW, 0x01, 0x01, 
-     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-     SET_LOW_DIRECTION(GPIO_10), 
-     0x8f, 0xff, 0xff, 
-     0x8f, 0xff, 0xff, 
-     0x8f, 0x6b, 0xdc, 
-     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-     SET_LOW_DIRECTION(GPIO_01), 
-     JTAG_IRREG_RW(IRREG_ISC_NOOP),
-     0x87, 
-};
-static unsigned char readdata9z[] = { 0x88, 0x44, };
+    static unsigned char item15z[] = {
+         TMSW, 0x02, 0x07, 
+         TMSW, 0x00, 0x7f, 
+         TMSW, 0x00, 0x00, 
+         JTAG_IRREG(IRREG_JPROGRAM),
+         TMSW, 0x01, 0x01, 
+         JTAG_IRREG(IRREG_ISC_NOOP),
+         TMSW, 0x01, 0x01, 
+         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+         SET_LOW_DIRECTION(GPIO_10), 
+         0x8f, 0xff, 0xff, 
+         0x8f, 0xff, 0xff, 
+         0x8f, 0x6b, 0xdc, 
+         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+         SET_LOW_DIRECTION(GPIO_01), 
+         JTAG_IRREG_RW(IRREG_ISC_NOOP),
+         0x87, 
+    };
+    static unsigned char readdata9z[] = { 0x88, 0x44, };
     writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
     check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
 
-static unsigned char item16z[] = {
-     TMSW, 0x01, 0x01, 
-     JTAG_IRREG_RW(IRREG_CFG_IN),
-     0x87, 
-};
-static unsigned char readdata10z[] = { 0x8a, 0x45, };
+    /*
+     * Step 6: Load Configuration Data Frames
+     */
+    static unsigned char item16z[] = {
+         TMSW, 0x01, 0x01, 
+         JTAG_IRREG_RW(IRREG_CFG_IN),
+         0x87, 
+    };
+    static unsigned char readdata10z[] = { 0x8a, 0x45, };
     writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
     check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
@@ -448,82 +466,82 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
     writetc = NULL;
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
-static unsigned char item17z[] = {
-     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-     SET_LOW_DIRECTION(GPIO_10), 
-     0x8f, 0x3d, 0x49, 
-     SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
-     SET_LOW_DIRECTION(GPIO_01),
-     SYNC_PATTERN(0x40, 0x03)
-};
-static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
+    static unsigned char item17z[] = {
+         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+         SET_LOW_DIRECTION(GPIO_10), 
+         0x8f, 0x3d, 0x49, 
+         SET_LOW_DIRECTION(GPIO_10 | GPIO_01), 
+         SET_LOW_DIRECTION(GPIO_01),
+         SYNC_PATTERN(0x40, 0x03)
+    };
+    static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80, };
     writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
     check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
 
-static unsigned char item18z[] = {
-     TMSW, 0x01, 0x01, 
-     JTAG_IRREG(IRREG_BYPASS),
-     TMSW, 0x01, 0x01, 
-     JTAG_IRREG(IRREG_JSTART),
-     TMSW, 0x01, 0x01, 
-     TMSW, 0x00, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x06, 0x00, 
-     TMSW, 0x01, 0x00, 
-     JTAG_IRREG_RW(IRREG_BYPASS),
-     0x87, 
-};
-static unsigned char readdata12z[] = { 0xac, 0xd6, };
+    static unsigned char item18z[] = {
+         TMSW, 0x01, 0x01, 
+         JTAG_IRREG(IRREG_BYPASS),
+         TMSW, 0x01, 0x01, 
+         JTAG_IRREG(IRREG_JSTART),
+         TMSW, 0x01, 0x01, 
+         TMSW, 0x00, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x06, 0x00, 
+         TMSW, 0x01, 0x00, 
+         JTAG_IRREG_RW(IRREG_BYPASS),
+         0x87, 
+    };
+    static unsigned char readdata12z[] = { 0xac, 0xd6, };
     writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
     check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
 
-static unsigned char item19z[] = {
-     TMSW, 0x01, 0x01, 
-     SYNC_PATTERN(0x00, 0x07)
-};
-static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
+    static unsigned char item19z[] = {
+         TMSW, 0x01, 0x01, 
+         SYNC_PATTERN(0x00, 0x07)
+    };
+    static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
     writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
     check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
 
-static unsigned char item20z[] = {
-     TMSW, 0x01, 0x01, 
-     JTAG_IRREG(IRREG_BYPASS),
-     TMSW, 0x01, 0x01, 
-};
+    static unsigned char item20z[] = {
+         TMSW, 0x01, 0x01, 
+         JTAG_IRREG(IRREG_BYPASS),
+         TMSW, 0x01, 0x01, 
+    };
     writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
     ftdi_transfer_data_done(writetc);
 
-static unsigned char item21z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x00, 
-     TMSW, 0x03, 0x03, 
-     DATARWBIT, 0x04, 0xff, 
-     TMSRW, 0x02, 0x83, 
-     0x87, 
-};
-static unsigned char readdata14z[] = { 0xa9, 0xf5, };
+    static unsigned char item21z[] = {
+         TMSW, 0x02, 0x07, 
+         TMSW, 0x00, 0x7f, 
+         TMSW, 0x00, 0x00, 
+         TMSW, 0x03, 0x03, 
+         DATARWBIT, 0x04, 0xff, 
+         TMSRW, 0x02, 0x83, 
+         0x87, 
+    };
+    static unsigned char readdata14z[] = { 0xa9, 0xf5, };
     writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
     check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
     test_different(ctxitem0z);
 
-static unsigned char item22z[] = {
-     TMSW, 0x02, 0x07, 
-     TMSW, 0x00, 0x7f, 
-     TMSW, 0x00, 0x01, 
-     SYNC_PATTERN_SINGLE };
+    static unsigned char item22z[] = {
+         TMSW, 0x02, 0x07, 
+         TMSW, 0x00, 0x7f, 
+         TMSW, 0x00, 0x01, 
+         SYNC_PATTERN_SINGLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
     check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
 
