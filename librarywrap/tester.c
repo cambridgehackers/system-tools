@@ -83,35 +83,35 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char
     ftdi_transfer_data_done(tc);
     //printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 }
-static void test_pattern(struct ftdi_context *ftdi)
-{
-#define DATA_ITEM(...) \
-     TMSW, 0x03, 0x03,  \
-     DATAWBIT, 0x04, 0xff,  \
-     TMSW, 0x02, 0x83,  \
-     EXTENDED_COMMAND(0xc3), \
-     __VA_ARGS__        \
+#define COMMAND_ENDING \
      DATAR, 0x02, 0x00,  \
      DATARBIT, 0x06,  \
      TMSR, 0x02, 0x03,  \
-     0x87, 
-static unsigned char item5z[] = {
-     DATA_ITEM( )
-};
+     0x87
+
+#define DATA_ITEM \
+     TMSW, 0x03, 0x03,  \
+     DATAWBIT, 0x04, 0xff,  \
+     TMSW, 0x02, 0x83,  \
+     EXTENDED_COMMAND(0xc3)
+
+static void test_pattern(struct ftdi_context *ftdi)
+{
+static unsigned char item5z[] = { DATA_ITEM, COMMAND_ENDING, };
 static unsigned char item6z[] = {
-     DATA_ITEM( \
-         DATAW_BYTES_LEN(1), 0x69, \
-         DATAWBIT, 0x01, 0x00, \
-     )
+     DATA_ITEM,
+     DATAW_BYTES_LEN(1), 0x69,
+     DATAWBIT, 0x01, 0x00,
+     COMMAND_ENDING,
 };
 static unsigned char item7z[] = {
-     DATA_ITEM( \
-         DATAWBIT, 0x04, 0x0c, \
-         TMSW, 0x02, 0x03, \
-         TMSW, 0x02, 0x01, \
-         DATAW_BYTES_LEN(1), 0x69, \
-         DATAWBIT, 0x01, 0x00, \
-     )
+     DATA_ITEM,
+     DATAWBIT, 0x04, 0x0c,
+     TMSW, 0x02, 0x03,
+     TMSW, 0x02, 0x01,
+     DATAW_BYTES_LEN(1), 0x69,
+     DATAWBIT, 0x01, 0x00,
+     COMMAND_ENDING,
 };
 static unsigned char readdata_five_zeros[] = { 0x00, 0x00, 0x00, 0x00, 0x00, };
 int i;
@@ -263,10 +263,7 @@ static unsigned char item11z[] = {
      TMSW, 0x00, 0x7f, 
      TMSW, 0x00, 0x00, 
      EXTENDED_COMMAND(0xc8),
-     DATAR, 0x02, 0x00, 
-     DATARBIT, 0x06, 
-     TMSR, 0x02, 0x03, 
-     0x87, 
+     COMMAND_ENDING,
 };
 static unsigned char readdata_five_ff[] = { 0xff, 0xff, 0xff, 0xff, 0xff, };
     writetc = ftdi_write_data_submit(ctxitem0z, item11z, sizeof(item11z));
@@ -292,10 +289,7 @@ static unsigned char readdata7z[] = { 0xaf, 0xf5, };
      DATAWBIT, 0x06, 0x00,  \
      TMSW, 0x02, 0x03,  \
      EXTENDED_COMMAND(0xc4), \
-     DATAR, 0x02, 0x00,  \
-     DATARBIT, 0x06,  \
-     TMSR, 0x02, 0x03,  \
-     0x87, 
+     COMMAND_ENDING,
 static unsigned char item13z[] = {
      TMSW, 0x02, 0x07,
      SYNC_DATAW };
