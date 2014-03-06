@@ -37,6 +37,8 @@
 #include "ftdi_reference.h"
 
 #define BUFFER_MAX_LEN 1000000
+#define FILE_READSIZE 6464
+#define MAX_SINGLE_USB_DATA 4045
 #define IDCODE_VALUE 0x93, 0x10, 0x65, 0x43
 
 #define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
@@ -218,7 +220,6 @@ static void test_different(struct ftdi_context *ftdi)
     for (j = 0; j < 3; j++)
         test_pattern(ftdi);
 }
-#define FILE_READSIZE 6464
 int main()
 {
     unsigned char bitswap[256];
@@ -274,8 +275,8 @@ int main()
      */
     static unsigned char errorcode_fa[] = { 0xfa, };
     for (i = 0; i < 4; i++) {
-        static unsigned char command_aa[] = { 0xaa, SEND_IMMEDIATE, };
-        ftdi_write_data(ctxitem0z, command_aa, sizeof(command_aa));
+        static unsigned char illegal_command[] = { 0xaa, SEND_IMMEDIATE, };
+        ftdi_write_data(ctxitem0z, illegal_command, sizeof(illegal_command));
         ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
         static unsigned char readdata1z[] = { 0xaa, };
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
@@ -286,6 +287,9 @@ int main()
     static unsigned char readdata2z[] = { 0xab, };
     ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
+    /*
+     * Initialize FTDI chip and GPIO pins
+     */
     static unsigned char initialize_sequence[] = {
          0x85,
          0x8a,
@@ -303,14 +307,11 @@ int main()
     for (k = 0; k < 2; k++)
         test_different(ctxitem0z);
 
-    static unsigned char item8z[] = {
-         TMSW, 0x02, 0x07,
-         TMSW, 0x00, 0x7f,
-    };
+    static unsigned char item8z[] = { TMSW, 0x02, 0x07, TMSW, 0x00, 0x7f, };
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
-    static unsigned char command_86[] = { 0x86, 0x01, 0x00, };
-    ftdi_write_data(ctxitem0z, command_86, sizeof(command_86));
+    static unsigned char command_wait_io_high[] = { 0x86, 0x01, 0x00, };
+    ftdi_write_data(ctxitem0z, command_wait_io_high, sizeof(command_wait_io_high));
 
     /*
      * Step 5: Check Device ID
@@ -405,7 +406,6 @@ int main()
     check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
 
     printf("Starting to send file\n");
-#define MAX_SINGLE_USB_DATA 4045
     static unsigned char enter_shift_dr[] = {
           TMSW, 0x01, 0x01,
           TMSW, 0x02, 0x01,
@@ -507,10 +507,7 @@ int main()
     writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
     check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
 
-    static unsigned char item19z[] = {
-         TMSW, 0x01, 0x01,
-         SYNC_PATTERN(0x00, 0x07)
-    };
+    static unsigned char item19z[] = { TMSW, 0x01, 0x01, SYNC_PATTERN(0x00, 0x07) };
     static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f, };
     writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
     check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
