@@ -61,30 +61,30 @@
 #define SEND_IMMEDIATE     0x87
 
 #define GPIO_DONE   0x10
-#define GPIO_01   0x01
+#define GPIO_01     0x01
 #define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
 
-#define IRREG_JPROGRAM 0x0b
-#define IRREG_ISC_NOOP 0x14
-#define IRREG_CFG_IN   0x05
 #define IRREG_CFG_OUT  0x04
+#define IRREG_CFG_IN   0x05
+#define IRREG_JPROGRAM 0x0b
 #define IRREG_JSTART   0x0c
-#define IRREG_BYPASS   0x7f
+#define IRREG_ISC_NOOP 0x14
+#define IRREG_BYPASS   0x13f
 
 #define JTAG_IRREG(A) \
      TMSW, 0x03, 0x03, \
-     DATAWBIT, 0x04, ((A)&0x3f), \
-     TMSW, 0x00, ((((A) & 0x40)<<1) | 0x01)
+     DATAWBIT, 0x04, (A) & 0xff, \
+     TMSW, 0x00, ((((A) & 0x100)>>1) | 0x01)
 
 #define JTAG_IRREG_RW(A) \
      TMSW, 0x03, 0x03, \
-     DATARWBIT, 0x04, ((A)&0x3f), \
-     TMSRW, 0x00, ((((A) & 0x40)<<1) | 0x01)
+     DATARWBIT, 0x04, (A) & 0xff, \
+     TMSRW, 0x00, ((((A) & 0x100)>>1) | 0x01)
 
 #define EXTENDED_COMMAND(A) \
      TMSW, 0x03, 0x03,  \
-     DATAWBIT, 0x04, (A),  \
-     TMSW, 0x02, 0x03
+     DATAWBIT, 0x04, (A) & 0xff,  \
+     TMSW, 0x02, ((((A) & 0x100)>>1) | 0x03)
 
 #define COMMAND_ENDING \
      DATAR, 0x02, 0x00,  \
@@ -170,9 +170,7 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char
 static void test_pattern(struct ftdi_context *ftdi)
 {
 #define DATA_ITEM \
-     TMSW, 0x03, 0x03,  \
-     DATAWBIT, 0x04, 0xff,  \
-     TMSW, 0x02, 0x83,  \
+     EXTENDED_COMMAND(0x1ff), \
      EXTENDED_COMMAND(0xc3), \
      TMSW, 0x02, 0x01
 
