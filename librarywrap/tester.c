@@ -66,6 +66,7 @@
 #define IDLE_TO_RESET      TMSW, 0x02, 0x07  /* Idle -> Reset */
 #define RESET_TO_IDLE      TMSW, 0x00, 0x00  /* Reset -> Idle */
 #define IN_RESET_STATE     TMSW, 0x00, 0x7f  /* Marker for Reset */
+#define SHIFT_TO_UPDATE_TO_IDLE TMSW, 0x02, 0x03 /* Shift-DR -> Update-DR -> Idle */
 
 #define GPIO_DONE          0x10
 #define GPIO_01            0x01
@@ -104,15 +105,15 @@
      TMSRW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */ \
      SEND_IMMEDIATE
 
-#define SYNC_PATTERN_SINGLE \
-     EXTENDED_COMMAND(0xc5), \
+#define SYNC_PATTERN_SINGLE                   \
+     EXTENDED_COMMAND(0xc5),                  \
      IDLE_TO_SHIFT_DR,                        \
-     DATAW_BYTES_LEN(19), \
+     DATAW_BYTES_LEN(19),                     \
           0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
           0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,  \
-     TMSW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */  \
-     EXTENDED_COMMAND(0xc4), \
+     DATAWBIT, 0x06, 0x00,                    \
+     SHIFT_TO_UPDATE_TO_IDLE,                 \
+     EXTENDED_COMMAND(0xc4),                  \
      IDLE_TO_SHIFT_DR,                        \
      COMMAND_ENDING
 
@@ -193,7 +194,7 @@ static void test_pattern(struct ftdi_context *ftdi)
     static unsigned char item7z[] = {
          DATA_ITEM,
          DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
-         TMSW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */
+         SHIFT_TO_UPDATE_TO_IDLE,
          IDLE_TO_SHIFT_DR,
          DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
