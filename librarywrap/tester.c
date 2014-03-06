@@ -332,17 +332,24 @@ static unsigned char item22z[] = {
     for (k = 0; k < 3; k++)
         test_different(ctxitem0z);
 
+#define IRREG_JPROGRAM 0x0b
+#define IRREG_ISC_NOOP 0x14
+#define IRREG_CFG_IN  0x05
+#define IRREG_CFG_OUT 0x04
+#define IRREG_JSTART 0x0c
+
+#define JTAG_IRREG(A) \
+     TMSW, 0x03, 0x03, \
+     DATAWBIT, 0x04, (A), \
+     TMSW, 0x00, 0x01, 
+
 static unsigned char item15z[] = {
      TMSW, 0x02, 0x07, 
      TMSW, 0x00, 0x7f, 
      TMSW, 0x00, 0x00, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0x0b, 
-     TMSW, 0x00, 0x01, 
+     JTAG_IRREG(IRREG_JPROGRAM)
      TMSW, 0x01, 0x01, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0x14, 
-     TMSW, 0x00, 0x01, 
+     JTAG_IRREG(IRREG_ISC_NOOP)
      TMSW, 0x01, 0x01, 
      0x80, 0xe0, 0xfb, 
      0x80, 0xe0, 0xfa, 
@@ -440,9 +447,7 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
 #define SYNC_PATTERN(A,B) \
-     TMSW, 0x03, 0x03,  \
-     DATAWBIT, 0x04, 0x05,  \
-     TMSW, 0x00, 0x01,  \
+     JTAG_IRREG(IRREG_CFG_IN) \
      TMSW, 0x01, 0x01,  \
      TMSW, 0x02, 0x01,  \
      DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
@@ -458,9 +463,7 @@ static unsigned char readdata10z[] = { 0x8a, 0x45, };
      DATAWBIT, 0x06, 0x00,  \
      TMSW, 0x00, 0x01,  \
      TMSW, 0x01, 0x01,  \
-     TMSW, 0x03, 0x03,  \
-     DATAWBIT, 0x04, 0x04,  \
-     TMSW, 0x00, 0x01,  \
+     JTAG_IRREG(IRREG_CFG_OUT) \
      TMSW, 0x01, 0x01,  \
      TMSW, 0x02, 0x01,  \
      DATARW(3), 0x00, 0x00, 0x00,  \
@@ -485,9 +488,7 @@ static unsigned char item18z[] = {
      DATAWBIT, 0x04, 0x3f, 
      TMSW, 0x00, 0x81, 
      TMSW, 0x01, 0x01, 
-     TMSW, 0x03, 0x03, 
-     DATAWBIT, 0x04, 0x0c, 
-     TMSW, 0x00, 0x01, 
+     JTAG_IRREG(IRREG_JSTART)
      TMSW, 0x01, 0x01, 
      TMSW, 0x00, 0x00, 
      TMSW, 0x06, 0x00, 
