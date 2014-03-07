@@ -37,23 +37,34 @@
 
 #include "ftdi_reference.h"
 
-#define BUFFER_MAX_LEN 1000000
-#define FILE_READSIZE 6464
-#define MAX_SINGLE_USB_DATA 4045
-#define IDCODE_VALUE 0x93, 0x10, 0x65, 0x43
+#define BUFFER_MAX_LEN      1000000
+#define FILE_READSIZE          6464
+#define MAX_SINGLE_USB_DATA    4045
+#define TOKENPASTE4(A, B, C, D) (A ## B ## C ## D)
+#define INT16(A)           ((A) & 0xff), (((A) >> 8) & 0xff)
+#define INT32(A)           INT16(A), INT16((A) >> 16)
 
-#define INT16(A)           ((A) & 0xff), ((A) >> 8)
+// IDCODE from bsd file
+#define IDCODE_XC7K325T    TOKENPASTE4(  \
+      /*XXXX         / version */        \
+      0b0011011,     /* family */        \
+        001010001,   /* array size */    \
+        00001001001, /* manufacturer */  \
+        1)           /* required by 1149.1 */
+#define IDCODE_VERSION     0x40000000
+
+#define IDCODE_VALUE INT32(IDCODE_VERSION | IDCODE_XC7K325T)
 
 #define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
 #define MWRITE  (MPSSE_LSB|MPSSE_WRITE_NEG)
 
-#define TMSW    (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE) //4b
+#define TMSW    (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE)//4b
 #define TMSRW   (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
 #define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), INT16((A)-1)//3d
 
-#define DATAR     (MPSSE_DO_READ               |MREAD)                //2c
-#define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE) //1b
-#define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE)  //2e
+#define DATAR     (MPSSE_DO_READ               |MREAD)               //2c
+#define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE)//1b
+#define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE) //2e
 #define DATARWBIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE)//3f
 #define DATAW_BYTES        0x19
 #define DATAW_BYTES_LEN(A) DATAW_BYTES, INT16((A)-1)
@@ -67,25 +78,25 @@
 #define RESET_TO_IDLE      TMSW, 0x00, 0x00  /* Reset -> Idle */
 #define IN_RESET_STATE     TMSW, 0x00, 0x7f  /* Marker for Reset */
 #define SHIFT_TO_EXIT1(A) \
-     TMSW, 0x00, ((A) | 0x01) /* Shift-IR -> Exit1-IR */
+     TMSW, 0x00, ((A) | 0x01)             /* Shift-IR -> Exit1-IR */
 #define SHIFT_TO_EXIT1_RW(A) \
-     TMSRW, 0x00, ((A) | 0x01) /* Shift-IR -> Exit1-IR */
+     TMSRW, 0x00, ((A) | 0x01)            /* Shift-IR -> Exit1-IR */
 #define SHIFT_TO_UPDATE_TO_IDLE(A) \
-     TMSW, 0x02, ((A) | 0x03) /* Shift-DR -> Update-DR -> Idle */
+     TMSW, 0x02, ((A) | 0x03)    /* Shift-DR -> Update-DR -> Idle */
 #define SHIFT_TO_UPDATE_TO_IDLE_RW(A) \
-     TMSRW, 0x02, ((A) | 0x03) /* Shift-DR -> Update-DR -> Idle */
+     TMSRW, 0x02, ((A) | 0x03)   /* Shift-DR -> Update-DR -> Idle */
 #define FORCE_RETURN_TO_RESET TMSW, 0x04, 0x1f /* go back to TMS reset state */
 
-#define GPIO_DONE          0x10
-#define GPIO_01            0x01
+#define GPIO_DONE            0x10
+#define GPIO_01              0x01
 #define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
 
-#define IRREG_CFG_OUT      0x004
-#define IRREG_CFG_IN       0x005
-#define IRREG_JPROGRAM     0x00b
-#define IRREG_JSTART       0x00c
-#define IRREG_ISC_NOOP     0x014
-#define IRREG_BYPASS       0x13f
+#define IRREG_CFG_OUT        0x004
+#define IRREG_CFG_IN         0x005
+#define IRREG_JPROGRAM       0x00b
+#define IRREG_JSTART         0x00c
+#define IRREG_ISC_NOOP       0x014
+#define IRREG_BYPASS         0x13f
 
 #define JTAG_IRREG(A) \
      IDLE_TO_SHIFT_IR,                                      \
@@ -117,7 +128,7 @@
      EXTENDED_COMMAND(0xc5),                  \
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
-          0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
+          INT32(0xffffffff), 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
           0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
      SHIFT_TO_UPDATE_TO_IDLE(0),              \
@@ -128,7 +139,7 @@
 #define SYNC_PATTERN(A,B) \
      JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,    \
      IDLE_TO_SHIFT_DR,                           \
-     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff, \
+     DATAW_BYTES_LEN(4), INT32(0xffffffff), \
      DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66, \
      DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
      DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80, \
@@ -424,8 +435,8 @@ int main(int argc, char **argv)
          JTAG_IRREG(IRREG_ISC_NOOP), EXIT1_TO_IDLE,
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_DONE),
-         PULSE_CLOCK, INT16(65535),
-         PULSE_CLOCK, INT16(65535),
+         PULSE_CLOCK, INT16(65536 - 1),
+         PULSE_CLOCK, INT16(65536 - 1),
          PULSE_CLOCK, INT16(15000000/80 - 65536 - 65536 - 1), // 12.5 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_01),
@@ -483,11 +494,12 @@ int main(int argc, char **argv)
                 if (last) {
                     *readptr++ = TMSW; /* Shift-DR -> Exit1-DR */
                     *readptr++ = 0x00;
-                    *readptr++ = 0x01 | (0x80 & ch); // 1 bit if data here
+                    *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
                 }
-                *readptr++ = TMSW; /* Shift-DR -> Pause-DR; if last, Exit1-DR -> Idle */
+                *readptr++ = TMSW; /* if !last, Shift-DR -> Pause-DR;
+                                    * if last,  Exit1-DR -> Idle */
                 *readptr++ = 0x01;
-                *readptr++ = 0x01 | (0x80 & ch); // 1 bit if data here
+                *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
             }
             //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
             if (writetc)
@@ -497,7 +509,7 @@ int main(int argc, char **argv)
             readptr = readbuffer;
         }
         limit_len = MAX_SINGLE_USB_DATA;
-        *readptr++ = TMSW; /* Pause-DR -> Shift-DR */
+        *readptr++ = TMSW; /* TAP state transition: Pause-DR -> Shift-DR */
         *readptr++ = 0x01;
         *readptr++ = 0x01;
     }
