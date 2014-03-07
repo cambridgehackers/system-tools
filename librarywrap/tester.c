@@ -174,6 +174,10 @@
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), 0xff
 
+#define WRITE_READ(FTDI, A, B) \
+    writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
+    check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
+
 static unsigned char readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
 static unsigned char item14z[] = { IDLE_TO_RESET };
 static unsigned char readdata8z[] = { INT32(0x7f9e0802), 0x0f };
@@ -239,13 +243,10 @@ static void test_pattern(struct ftdi_context *ftdi)
     static unsigned char readdata_five_zeros[] = { INT32(0), 0x00 };
     int i;
 
-    writetc = ftdi_write_data_submit(ftdi, item5z, sizeof(item5z));
-    check_ftdi_read_data_submit(ftdi, readdata_five_zeros, sizeof(readdata_five_zeros));
-    writetc = ftdi_write_data_submit(ftdi, item6z, sizeof(item6z));
-    check_ftdi_read_data_submit(ftdi, readdata_five_zeros, sizeof(readdata_five_zeros));
+    WRITE_READ(ftdi, item5z, readdata_five_zeros);
+    WRITE_READ(ftdi, item6z, readdata_five_zeros);
     for (i = 0; i < 2; i++) {
-        writetc = ftdi_write_data_submit(ftdi, item7z, sizeof(item7z));
-        check_ftdi_read_data_submit(ftdi, readdata_five_zeros, sizeof(readdata_five_zeros));
+        WRITE_READ(ftdi, item7z, readdata_five_zeros);
     }
 }
 
@@ -261,8 +262,7 @@ static void test_idcode(struct ftdi_context *ftdi)
 {
     static unsigned char item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN };
     int j;
-    writetc = ftdi_write_data_submit(ftdi, item4z, sizeof(item4z));
-    check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+    WRITE_READ(ftdi, item4z, readdata3z);     // IDCODE 00ff
     for (j = 0; j < 3; j++)
         test_pattern(ftdi);
 }
@@ -273,8 +273,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
      //SHIFT_TO_EXIT1(0)  ??
     int j = 3, k = 2;
 
-    writetc = ftdi_write_data_submit(ftdi, item3z, sizeof(item3z));
-    check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z)); // IDCODE 00ff
+    WRITE_READ(ftdi, item3z, readdata3z);     // IDCODE 00ff
     if(instance) {
         while (j-- > 0)
             test_pattern(ftdi);
@@ -390,8 +389,7 @@ int main(int argc, char **argv)
          SEND_IMMEDIATE,
     };
     static unsigned char readdata5z[] = { IDCODE_VALUE, PATTERN2 };
-    writetc = ftdi_write_data_submit(ctxitem0z, generic_read_idcode, sizeof(generic_read_idcode));
-    check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
+    WRITE_READ(ctxitem0z, generic_read_idcode, readdata5z);     // IDCODE ffff
 
     static unsigned char item11z[] = {
          FORCE_RETURN_TO_RESET,
@@ -402,18 +400,15 @@ int main(int argc, char **argv)
          COMMAND_ENDING,
     };
     static unsigned char readdata_five_ff[] = { 0xff, 0xff, 0xff, 0xff, 0xff };
-    writetc = ftdi_write_data_submit(ctxitem0z, item11z, sizeof(item11z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata_five_ff, sizeof(readdata_five_ff));
+    WRITE_READ(ctxitem0z, item11z, readdata_five_ff);
     for (i = 0; i < 3; i++) {
         static unsigned char item12z[] = { EXTENDED_COMMAND_RW(0x1ff), SEND_IMMEDIATE };
         static unsigned char readdata7z[] = { 0xaf, 0xf5 };
-        writetc = ftdi_write_data_submit(ctxitem0z, item12z, sizeof(item12z));
-        check_ftdi_read_data_submit(ctxitem0z, readdata7z, sizeof(readdata7z));
+        WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
 
     static unsigned char item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, SYNC_PATTERN_SINGLE };
-    writetc = ftdi_write_data_submit(ctxitem0z, item13z, sizeof(item13z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
+    WRITE_READ(ctxitem0z, item13z, readdata8z);
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
     ftdi_transfer_data_done(writetc);
 
@@ -436,8 +431,7 @@ int main(int argc, char **argv)
          JTAG_IRREG_RW(IRREG_ISC_NOOP), SEND_IMMEDIATE,
     };
     static unsigned char readdata9z[] = { 0x88, 0x44 };
-    writetc = ftdi_write_data_submit(ctxitem0z, item15z, sizeof(item15z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
+    WRITE_READ(ctxitem0z, item15z, readdata9z);
 
     /*
      * Step 6: Load Configuration Data Frames
@@ -445,8 +439,7 @@ int main(int argc, char **argv)
     static unsigned char item16z[] = { EXIT1_TO_IDLE,
          JTAG_IRREG_RW(IRREG_CFG_IN), SEND_IMMEDIATE };
     static unsigned char readdata10z[] = { 0x8a, 0x45 };
-    writetc = ftdi_write_data_submit(ctxitem0z, item16z, sizeof(item16z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata10z, sizeof(readdata10z));
+    WRITE_READ(ctxitem0z, item16z, readdata10z);
 
     printf("Starting to send file '%s'\n", argv[1]);
     static unsigned char enter_shift_dr[] = { EXIT1_TO_IDLE,
@@ -523,8 +516,7 @@ int main(int argc, char **argv)
          SYNC_PATTERN(0x40, 0x03)
     };
     static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
-    writetc = ftdi_write_data_submit(ctxitem0z, item17z, sizeof(item17z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata11z, sizeof(readdata11z));
+    WRITE_READ(ctxitem0z, item17z, readdata11z);
 
     static unsigned char item18z[] = {
          EXIT1_TO_IDLE,
@@ -540,13 +532,11 @@ int main(int argc, char **argv)
          JTAG_IRREG_RW(IRREG_BYPASS), SEND_IMMEDIATE,
     };
     static unsigned char readdata12z[] = { 0xac, 0xd6 };
-    writetc = ftdi_write_data_submit(ctxitem0z, item18z, sizeof(item18z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata12z, sizeof(readdata12z));
+    WRITE_READ(ctxitem0z, item18z, readdata12z);
 
     static unsigned char item19z[] = { EXIT1_TO_IDLE, SYNC_PATTERN(0x00, 0x07) };
     static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
-    writetc = ftdi_write_data_submit(ctxitem0z, item19z, sizeof(item19z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata13z, sizeof(readdata13z));
+    WRITE_READ(ctxitem0z, item19z, readdata13z);
 
     static unsigned char item20z[] = { EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_BYPASS), EXIT1_TO_IDLE };
@@ -559,8 +549,7 @@ int main(int argc, char **argv)
          SEND_IMMEDIATE,
     };
     static unsigned char readdata14z[] = { 0xa9, 0xf5 };
-    writetc = ftdi_write_data_submit(ctxitem0z, item21z, sizeof(item21z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata14z, sizeof(readdata14z));
+    WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
 
     static unsigned char item22z[] = {
@@ -569,8 +558,7 @@ int main(int argc, char **argv)
          TMSW, 0x00, 0x01,  /* ... -> Reset */
          RESET_TO_IDLE,
          SYNC_PATTERN_SINGLE };
-    writetc = ftdi_write_data_submit(ctxitem0z, item22z, sizeof(item22z));
-    check_ftdi_read_data_submit(ctxitem0z, readdata8z, sizeof(readdata8z));
+    WRITE_READ(ctxitem0z, item22z, readdata8z);
 
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
     ftdi_transfer_data_done(writetc);
