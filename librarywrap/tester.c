@@ -178,14 +178,14 @@
     writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
     check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
 
-static unsigned char readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
-static unsigned char item14z[] = { IDLE_TO_RESET };
-static unsigned char readdata8z[] = { INT32(0x7f9e0802), 0x0f };
+static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
+static uint8_t item14z[] = { IDLE_TO_RESET };
+static uint8_t readdata8z[] = { INT32(0x7f9e0802), 0x0f };
 
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
 
-static void memdump(unsigned char *p, int len, char *title)
+static void memdump(uint8_t *p, int len, char *title)
 {
 int i;
 
@@ -203,9 +203,9 @@ int i;
     printf("\n");
 }
 
-static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
+static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
 {
-unsigned char temp[10000];
+uint8_t temp[10000];
     struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, temp, size);
     ftdi_transfer_data_done(writetc);
     ftdi_transfer_data_done(tc);
@@ -222,15 +222,15 @@ static void test_pattern(struct ftdi_context *ftdi)
      EXTENDED_COMMAND(0x1ff), \
      EXTENDED_COMMAND(0xc3)
 
-    static unsigned char item5z[] = { DATA_ITEM, IDLE_TO_SHIFT_DR, COMMAND_ENDING };
-    static unsigned char item6z[] = {
+    static uint8_t item5z[] = { DATA_ITEM, IDLE_TO_SHIFT_DR, COMMAND_ENDING };
+    static uint8_t item6z[] = {
          DATA_ITEM,
          IDLE_TO_SHIFT_DR,
          DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
          COMMAND_ENDING,
     };
-    static unsigned char item7z[] = {
+    static uint8_t item7z[] = {
          DATA_ITEM,
          IDLE_TO_SHIFT_DR,
          DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
@@ -240,7 +240,7 @@ static void test_pattern(struct ftdi_context *ftdi)
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
          COMMAND_ENDING,
     };
-    static unsigned char readdata_five_zeros[] = { INT32(0), 0x00 };
+    static uint8_t readdata_five_zeros[] = { INT32(0), 0x00 };
     int i;
 
     WRITE_READ(ftdi, item5z, readdata_five_zeros);
@@ -260,7 +260,7 @@ static void test_pattern(struct ftdi_context *ftdi)
 
 static void test_idcode(struct ftdi_context *ftdi)
 {
-    static unsigned char item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN };
+    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN };
     int j;
     WRITE_READ(ftdi, item4z, readdata3z);     // IDCODE 00ff
     for (j = 0; j < 3; j++)
@@ -269,7 +269,7 @@ static void test_idcode(struct ftdi_context *ftdi)
 
 static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
-    static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
+    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
      //SHIFT_TO_EXIT1(0)  ??
     int j = 3, k = 2;
 
@@ -285,7 +285,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
 
 int main(int argc, char **argv)
 {
-    unsigned char bitswap[256];
+    uint8_t bitswap[256];
     struct ftdi_context *ctxitem0z;
     int i;
     struct ftdi_device_list *devlist, *curdev;
@@ -316,7 +316,7 @@ int main(int argc, char **argv)
      * Identify JTAG interface version
      */
     int eeprom_val;
-    unsigned char fbuf[256]; // since chiptype is 0x56, eerom size is 256
+    uint8_t fbuf[256]; // since chiptype is 0x56, eerom size is 256
     ftdi_read_eeprom(ctxitem0z);
     ftdi_eeprom_decode(ctxitem0z, 0);
     ftdi_get_eeprom_value(ctxitem0z, CHIP_TYPE, &eeprom_val);
@@ -337,24 +337,24 @@ int main(int argc, char **argv)
     /*
      * Step 4: Synchronization
      */
-    static unsigned char errorcode_fa[] = { 0xfa };
+    static uint8_t errorcode_fa[] = { 0xfa };
     for (i = 0; i < 4; i++) {
-        static unsigned char illegal_command[] = { 0xaa, SEND_IMMEDIATE };
+        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
         ftdi_write_data(ctxitem0z, illegal_command, sizeof(illegal_command));
         ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
-        static unsigned char readdata1z[] = { 0xaa };
+        static uint8_t readdata1z[] = { 0xaa };
         ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
     }
-    static unsigned char command_ab[] = { 0xab, SEND_IMMEDIATE };
+    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
     ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
     ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
-    static unsigned char readdata2z[] = { 0xab };
+    static uint8_t readdata2z[] = { 0xab };
     ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
     /*
      * Initialize FTDI chip and GPIO pins
      */
-    static unsigned char initialize_sequence[] = {
+    static uint8_t initialize_sequence[] = {
          0x85, // Disconnect TDI/DO from loopback
          0x8a, // Disable clk divide by 5
          0x86, INT16(1), // 15MHz
@@ -367,16 +367,16 @@ int main(int argc, char **argv)
     ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
 
     check_idcode(ctxitem0z, 0);
-    static unsigned char item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
+    static uint8_t item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
-    static unsigned char command_set_divisor[] = { 0x86, INT16(1) }; // 15MHz
+    static uint8_t command_set_divisor[] = { 0x86, INT16(1) }; // 15MHz
     ftdi_write_data(ctxitem0z, command_set_divisor, sizeof(command_set_divisor));
 
     /*
      * Step 5: Check Device ID
      */
-    static unsigned char generic_read_idcode[] = {
+    static uint8_t generic_read_idcode[] = {
          TMSW, 0x00, 0x01,  /* ... -> Reset */
          IN_RESET_STATE,
          TMSW, 0x00, 0x01,  /* ... -> Reset */
@@ -388,10 +388,10 @@ int main(int argc, char **argv)
          TMSRW, 0x01, 0x81, /* Shift-DR -> Pause-DR */
          SEND_IMMEDIATE,
     };
-    static unsigned char readdata5z[] = { IDCODE_VALUE, PATTERN2 };
+    static uint8_t readdata5z[] = { IDCODE_VALUE, PATTERN2 };
     WRITE_READ(ctxitem0z, generic_read_idcode, readdata5z);     // IDCODE ffff
 
-    static unsigned char item11z[] = {
+    static uint8_t item11z[] = {
          FORCE_RETURN_TO_RESET,
          IN_RESET_STATE,
          RESET_TO_IDLE,
@@ -399,15 +399,15 @@ int main(int argc, char **argv)
          IDLE_TO_SHIFT_DR,
          COMMAND_ENDING,
     };
-    static unsigned char readdata_five_ff[] = { 0xff, 0xff, 0xff, 0xff, 0xff };
+    static uint8_t readdata_five_ff[] = { INT32(0xffffffff), 0xff };
     WRITE_READ(ctxitem0z, item11z, readdata_five_ff);
     for (i = 0; i < 3; i++) {
-        static unsigned char item12z[] = { EXTENDED_COMMAND_RW(0x1ff), SEND_IMMEDIATE };
-        static unsigned char readdata7z[] = { 0xaf, 0xf5 };
+        static uint8_t item12z[] = { EXTENDED_COMMAND_RW(0x1ff), SEND_IMMEDIATE };
+        static uint8_t readdata7z[] = { 0xaf, 0xf5 };
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
 
-    static unsigned char item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, SYNC_PATTERN_SINGLE };
+    static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, SYNC_PATTERN_SINGLE };
     WRITE_READ(ctxitem0z, item13z, readdata8z);
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
     ftdi_transfer_data_done(writetc);
@@ -417,7 +417,7 @@ int main(int argc, char **argv)
     /*
      * Step 2: Initialization
      */
-    static unsigned char item15z[] = {
+    static uint8_t item15z[] = {
          IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
          JTAG_IRREG(IRREG_JPROGRAM), EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_ISC_NOOP), EXIT1_TO_IDLE,
@@ -430,31 +430,31 @@ int main(int argc, char **argv)
          SET_LSB_DIRECTION(GPIO_01),
          JTAG_IRREG_RW(IRREG_ISC_NOOP), SEND_IMMEDIATE,
     };
-    static unsigned char readdata9z[] = { 0x88, 0x44 };
+    static uint8_t readdata9z[] = { 0x88, 0x44 };
     WRITE_READ(ctxitem0z, item15z, readdata9z);
 
     /*
      * Step 6: Load Configuration Data Frames
      */
-    static unsigned char item16z[] = { EXIT1_TO_IDLE,
+    static uint8_t item16z[] = { EXIT1_TO_IDLE,
          JTAG_IRREG_RW(IRREG_CFG_IN), SEND_IMMEDIATE };
-    static unsigned char readdata10z[] = { 0x8a, 0x45 };
+    static uint8_t readdata10z[] = { 0x8a, 0x45 };
     WRITE_READ(ctxitem0z, item16z, readdata10z);
 
     printf("Starting to send file '%s'\n", argv[1]);
-    static unsigned char enter_shift_dr[] = { EXIT1_TO_IDLE,
+    static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
          IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
     inputfd = open(argv[1], O_RDONLY);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
     int last = 0;
-    static unsigned char readbuffer[BUFFER_MAX_LEN];
-    unsigned char *readptr = readbuffer;
+    static uint8_t readbuffer[BUFFER_MAX_LEN];
+    uint8_t *readptr = readbuffer;
     memcpy(readptr, enter_shift_dr, sizeof(enter_shift_dr));
     readptr += sizeof(enter_shift_dr);
     writetc = NULL;
     while (!last) {
-        static unsigned char filebuffer[10000];
-        unsigned char *ptrin = filebuffer;
+        static uint8_t filebuffer[10000];
+        uint8_t *ptrin = filebuffer;
 
         int remaining = read(inputfd, filebuffer, FILE_READSIZE);
         last = (remaining < FILE_READSIZE);
@@ -473,7 +473,7 @@ int main(int argc, char **argv)
             for (i = 0; i <= rlen; i++)
                 *readptr++ = *ptrin++;
             if (rlen < limit_len) {
-                unsigned char ch = *ptrin++;
+                uint8_t ch = *ptrin++;
                 *readptr++ = DATAWBIT;
                 *readptr++ = 0x06;
                 *readptr++ = ch;        // 7 bits of data here
@@ -507,7 +507,7 @@ int main(int argc, char **argv)
     /*
      * Step 8: Startup
      */
-    static unsigned char item17z[] = {
+    static uint8_t item17z[] = {
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_DONE),
          PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
@@ -515,10 +515,10 @@ int main(int argc, char **argv)
          SET_LSB_DIRECTION(GPIO_01),
          SYNC_PATTERN(0x40, 0x03)
     };
-    static unsigned char readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
+    static uint8_t readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
     WRITE_READ(ctxitem0z, item17z, readdata11z);
 
-    static unsigned char item18z[] = {
+    static uint8_t item18z[] = {
          EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_BYPASS), EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_JSTART), EXIT1_TO_IDLE,
@@ -531,28 +531,28 @@ int main(int argc, char **argv)
          TMSW, 0x01, 0x00,
          JTAG_IRREG_RW(IRREG_BYPASS), SEND_IMMEDIATE,
     };
-    static unsigned char readdata12z[] = { 0xac, 0xd6 };
+    static uint8_t readdata12z[] = { 0xac, 0xd6 };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
-    static unsigned char item19z[] = { EXIT1_TO_IDLE, SYNC_PATTERN(0x00, 0x07) };
-    static unsigned char readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
+    static uint8_t item19z[] = { EXIT1_TO_IDLE, SYNC_PATTERN(0x00, 0x07) };
+    static uint8_t readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
     WRITE_READ(ctxitem0z, item19z, readdata13z);
 
-    static unsigned char item20z[] = { EXIT1_TO_IDLE,
+    static uint8_t item20z[] = { EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_BYPASS), EXIT1_TO_IDLE };
     writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
     ftdi_transfer_data_done(writetc);
 
-    static unsigned char item21z[] = {
+    static uint8_t item21z[] = {
          IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
          EXTENDED_COMMAND_RW(0x1ff),
          SEND_IMMEDIATE,
     };
-    static unsigned char readdata14z[] = { 0xa9, 0xf5 };
+    static uint8_t readdata14z[] = { 0xa9, 0xf5 };
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
 
-    static unsigned char item22z[] = {
+    static uint8_t item22z[] = {
          IDLE_TO_RESET,
          IN_RESET_STATE,
          TMSW, 0x00, 0x01,  /* ... -> Reset */
