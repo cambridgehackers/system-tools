@@ -66,7 +66,14 @@
 #define IDLE_TO_RESET      TMSW, 0x02, 0x07  /* Idle -> Reset */
 #define RESET_TO_IDLE      TMSW, 0x00, 0x00  /* Reset -> Idle */
 #define IN_RESET_STATE     TMSW, 0x00, 0x7f  /* Marker for Reset */
-#define SHIFT_TO_UPDATE_TO_IDLE TMSW, 0x02, 0x03 /* Shift-DR -> Update-DR -> Idle */
+#define SHIFT_TO_EXIT1(A) \
+     TMSW, 0x00, ((A) | 0x01) /* Shift-IR -> Exit1-IR */
+#define SHIFT_TO_EXIT1_RW(A) \
+     TMSRW, 0x00, ((A) | 0x01) /* Shift-IR -> Exit1-IR */
+#define SHIFT_TO_UPDATE_TO_IDLE(A) \
+     TMSW, 0x02, ((A) | 0x03) /* Shift-DR -> Update-DR -> Idle */
+#define SHIFT_TO_UPDATE_TO_IDLE_RW(A) \
+     TMSRW, 0x02, ((A) | 0x03) /* Shift-DR -> Update-DR -> Idle */
 
 #define GPIO_DONE          0x10
 #define GPIO_01            0x01
@@ -82,27 +89,27 @@
 #define JTAG_IRREG(A) \
      IDLE_TO_SHIFT_IR,                                      \
      DATAWBIT, 0x04, (A) & 0xff,                            \
-     TMSW, 0x00, ((((A) & 0x100)>>1) | 0x01) /* Shift-IR -> Exit1-IR */
+     SHIFT_TO_EXIT1(((A) & 0x100)>>1)
 
 #define JTAG_IRREG_RW(A) \
      IDLE_TO_SHIFT_IR,                                      \
      DATARWBIT, 0x04, (A) & 0xff,                           \
-     TMSRW, 0x00, ((((A) & 0x100)>>1) | 0x01) /* Shift-IR -> Exit1-IR */
+     SHIFT_TO_EXIT1_RW(((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND(A) \
      IDLE_TO_SHIFT_IR,                                      \
      DATAWBIT, 0x04, (A) & 0xff,                            \
-     TMSW, 0x02, ((((A) & 0x100)>>1) | 0x03) /* Shift-IR -> Idle */
+     SHIFT_TO_UPDATE_TO_IDLE(((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND_RW(A) \
      IDLE_TO_SHIFT_IR,                                      \
      DATARWBIT, 0x04, (A) & 0xff,                           \
-     TMSRW, 0x02, ((((A) & 0x100)>>1) | 0x03) /* Shift-IR -> Update-IR -> Idle */
+     SHIFT_TO_UPDATE_TO_IDLE_RW(((A) & 0x100)>>1)
 
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
      DATAR, 0x02, 0x00,                                     \
      DATARBIT, 0x06,                                        \
-     TMSRW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */ \
+     SHIFT_TO_UPDATE_TO_IDLE_RW(0),                          \
      SEND_IMMEDIATE
 
 #define SYNC_PATTERN_SINGLE                   \
@@ -112,32 +119,32 @@
           0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
           0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
-     SHIFT_TO_UPDATE_TO_IDLE,                 \
+     SHIFT_TO_UPDATE_TO_IDLE(0),              \
      EXTENDED_COMMAND(0xc4),                  \
      IDLE_TO_SHIFT_DR,                        \
      COMMAND_ENDING
 
 #define SYNC_PATTERN(A,B) \
-     JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,   \
+     JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,    \
      IDLE_TO_SHIFT_DR,                           \
-     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff,  \
-     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
-     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80,  \
-     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0,  \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00,  \
+     DATAW_BYTES_LEN(4), 0xff, 0xff, 0xff, 0xff, \
+     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66, \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
+     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80, \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
+     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80, \
+     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0, \
+     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
      DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,       \
      DATAWBIT, 0x06, 0x00,                       \
-     TMSW, 0x00, 0x01,   /* Shift-DR -> Exit1 */ \
+     SHIFT_TO_EXIT1(0),                          \
      EXIT1_TO_IDLE,                              \
      JTAG_IRREG(IRREG_CFG_OUT), EXIT1_TO_IDLE,   \
      IDLE_TO_SHIFT_DR,                           \
-     DATARW(3), 0x00, 0x00, 0x00,  \
-     DATARWBIT, 0x06, 0x00,  \
-     TMSRW, 0x00, 0x01,  /* Shift-DR -> Exit1 */ \
+     DATARW(3), 0x00, 0x00, 0x00,                \
+     DATARWBIT, 0x06, 0x00,                      \
+     SHIFT_TO_EXIT1_RW(0),                       \
      SEND_IMMEDIATE
 
 #define PATTERN1 \
@@ -217,7 +224,7 @@ static void test_pattern(struct ftdi_context *ftdi)
     static unsigned char item7z[] = {
          DATA_ITEM,
          DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
-         SHIFT_TO_UPDATE_TO_IDLE,
+         SHIFT_TO_UPDATE_TO_IDLE(0),
          IDLE_TO_SHIFT_DR,
          DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
@@ -236,13 +243,13 @@ static void test_pattern(struct ftdi_context *ftdi)
     }
 }
 
-#define IDTEST_PATTERN \
-     TMSW, 0x04, 0x7f, /* Reset????? */  \
+#define IDTEST_PATTERN                          \
+     TMSW, 0x04, 0x7f, /* Reset????? */         \
      TMSW, 0x03, 0x02, /* Reset -> Shift-DR */  \
-     DATARW(63), PATTERN1, 0xff, 0x00, 0x00,  \
-     DATARWBIT, 0x06, 0x00,  \
-     TMSRW, 0x02, 0x03, /* Shift-DR -> Update-DR -> Idle */  \
-     SEND_IMMEDIATE,
+     DATARW(63), PATTERN1, 0xff, 0x00, 0x00,    \
+     DATARWBIT, 0x06, 0x00,                     \
+     SHIFT_TO_UPDATE_TO_IDLE_RW(0),             \
+     SEND_IMMEDIATE
 
 static void test_idcode(struct ftdi_context *ftdi)
 {
@@ -257,6 +264,7 @@ static void test_idcode(struct ftdi_context *ftdi)
 static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
     static unsigned char item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
+     //SHIFT_TO_EXIT1(0)  ??
     int j = 3, k = 2;
 
     writetc = ftdi_write_data_submit(ftdi, item3z, sizeof(item3z));
@@ -283,10 +291,8 @@ int main(int argc, char **argv)
         exit(1);
     }
     for (i = 0; i < sizeof(bitswap); i++)
-        bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
-           | ((i &    4) << 3) | ((i &    8) << 1)
-           | ((i & 0x10) >> 1) | ((i & 0x20) >> 3)
-           | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
+        bitswap[i] = ((i & 1) << 7) | ((i & 2) << 5) | ((i & 4) << 3) | ((i & 8) << 1)
+         | ((i & 0x10) >> 1) | ((i & 0x20) >> 3) | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
     /*
      * Locate USB interface for JTAG
      */
