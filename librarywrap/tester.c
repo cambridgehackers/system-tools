@@ -169,12 +169,35 @@ static unsigned char readdata8z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x0f };
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
 
+static void memdump(unsigned char *p, int len, char *title)
+{
+int i;
+
+    i = 0;
+    while (len > 0) {
+        if (!(i & 0xf)) {
+            if (i > 0)
+                printf("\n");
+            printf("%s: ",title);
+        }
+        printf("%02x ", *p++);
+        i++;
+        len--;
+    }
+    printf("\n");
+}
+
 static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
 {
-    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, buf, size);
+unsigned char temp[10000];
+    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, temp, size);
     ftdi_transfer_data_done(writetc);
     ftdi_transfer_data_done(tc);
-    //printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    if (memcmp(buf, temp, size)) {
+        printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+        memdump(buf, size, "EXPECT");
+        memdump(temp, size, "ACTUAL");
+    }
 }
 
 static void test_pattern(struct ftdi_context *ftdi)
@@ -253,9 +276,7 @@ int main(int argc, char **argv)
     struct ftdi_context *ctxitem0z;
     int i;
     struct ftdi_device_list *devlist, *curdev;
-    char tempstr0z[64];
-    char tempstr1z[128];
-    char tempstr2z[64];
+    char tempstr0z[64], tempstr2z[64], tempstr1z[128];
 
     if (argc != 2) {
         printf("tester <filename>\n");
@@ -273,7 +294,8 @@ int main(int argc, char **argv)
     ftdi_init(ctxitem0z);
     ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
     curdev = devlist;
-    ftdi_usb_get_strings(ctxitem0z, curdev->dev, tempstr2z, sizeof(tempstr2z), tempstr1z, sizeof(tempstr1z), tempstr0z, sizeof(tempstr0z));
+    ftdi_usb_get_strings(ctxitem0z, curdev->dev, tempstr2z, sizeof(tempstr2z),
+        tempstr1z, sizeof(tempstr1z), tempstr0z, sizeof(tempstr0z));
     printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, tempstr2z, tempstr1z, tempstr0z);
     ftdi_usb_open_dev(ctxitem0z, curdev->dev);
     ftdi_usb_reset(ctxitem0z);
