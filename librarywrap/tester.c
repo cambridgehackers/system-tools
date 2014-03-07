@@ -128,8 +128,8 @@
      EXTENDED_COMMAND(0xc5),                  \
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
-          INT32(0xffffffff), 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, \
-          0x00, 0x14, 0x00, 0x07, 0x80, 0x00, 0x00, 0x00,  \
+          INT32(0xffffffff), INT32(0x66aa9955), INT32(0x00000002), \
+          INT32(0x80070014), 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
      SHIFT_TO_UPDATE_TO_IDLE(0),              \
      EXTENDED_COMMAND(0xc4),                  \
@@ -140,14 +140,14 @@
      JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,    \
      IDLE_TO_SHIFT_DR,                           \
      DATAW_BYTES_LEN(4), INT32(0xffffffff), \
-     DATAW_BYTES_LEN(4), 0x55, 0x99, 0xaa, 0x66, \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
+     DATAW_BYTES_LEN(4), INT32(0x66aa9955), \
+     DATAW_BYTES_LEN(4), INT32(0x00000004), \
      DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80, \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
-     DATAW_BYTES_LEN(4), 0x0c, 0x00, 0x01, 0x80, \
-     DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0xb0, \
-     DATAW_BYTES_LEN(4), 0x04, 0x00, 0x00, 0x00, \
+     DATAW_BYTES_LEN(4), INT32(0x00000004), \
+     DATAW_BYTES_LEN(4), INT32(0x00000004), \
+     DATAW_BYTES_LEN(4), INT32(0x8001000c), \
+     DATAW_BYTES_LEN(4), INT32(0xb0000000), \
+     DATAW_BYTES_LEN(4), INT32(0x00000004), \
      DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,       \
      DATAWBIT, 0x06, 0x00,                       \
      SHIFT_TO_EXIT1(0),                          \
