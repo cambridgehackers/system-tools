@@ -74,6 +74,7 @@
      TMSW, 0x02, ((A) | 0x03) /* Shift-DR -> Update-DR -> Idle */
 #define SHIFT_TO_UPDATE_TO_IDLE_RW(A) \
      TMSRW, 0x02, ((A) | 0x03) /* Shift-DR -> Update-DR -> Idle */
+#define FORCE_RETURN_TO_RESET TMSW, 0x04, 0x1f /* go back to TMS reset state */
 
 #define GPIO_DONE          0x10
 #define GPIO_01            0x01
@@ -211,18 +212,19 @@ static void test_pattern(struct ftdi_context *ftdi)
 {
 #define DATA_ITEM \
      EXTENDED_COMMAND(0x1ff), \
-     EXTENDED_COMMAND(0xc3), \
-     IDLE_TO_SHIFT_DR
+     EXTENDED_COMMAND(0xc3)
 
-    static unsigned char item5z[] = { DATA_ITEM, COMMAND_ENDING };
+    static unsigned char item5z[] = { DATA_ITEM, IDLE_TO_SHIFT_DR, COMMAND_ENDING };
     static unsigned char item6z[] = {
          DATA_ITEM,
+         IDLE_TO_SHIFT_DR,
          DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
          COMMAND_ENDING,
     };
     static unsigned char item7z[] = {
          DATA_ITEM,
+         IDLE_TO_SHIFT_DR,
          DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
          SHIFT_TO_UPDATE_TO_IDLE(0),
          IDLE_TO_SHIFT_DR,
@@ -357,7 +359,7 @@ int main(int argc, char **argv)
          0x82, 0x20, 0x30,
          0x82, 0x30, 0x00,
          0x82, 0x00, 0x00,
-         TMSW, 0x04, 0x1f,   // go back to TMS reset state
+         FORCE_RETURN_TO_RESET
     };
     ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
 
@@ -388,7 +390,7 @@ int main(int argc, char **argv)
     check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z)); // IDCODE ffff
 
     static unsigned char item11z[] = {
-         TMSW, 0x04, 0x1f,   // go back to TMS reset state
+         FORCE_RETURN_TO_RESET,
          IN_RESET_STATE,
          RESET_TO_IDLE,
          EXTENDED_COMMAND(0xc8),
