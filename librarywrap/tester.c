@@ -42,21 +42,21 @@
 #define MAX_SINGLE_USB_DATA 4045
 #define IDCODE_VALUE 0x93, 0x10, 0x65, 0x43
 
+#define INT16(A)           ((A) & 0xff), ((A) >> 8)
+
 #define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
 #define MWRITE  (MPSSE_LSB|MPSSE_WRITE_NEG)
 
 #define TMSW    (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE) //4b
 #define TMSRW   (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
-#define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), /* 3d */ \
-    (((A)-1) & 0xff), (((A)-1) >> 8)
+#define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), INT16((A)-1)//3d
 
 #define DATAR     (MPSSE_DO_READ               |MREAD)                //2c
 #define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE) //1b
 #define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE)  //2e
 #define DATARWBIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE)//3f
 #define DATAW_BYTES        0x19
-#define DATAW_BYTES_LEN(A) DATAW_BYTES, \
-    (((A)-1) & 0xff), (((A)-1) >> 8)
+#define DATAW_BYTES_LEN(A) DATAW_BYTES, INT16((A)-1)
 #define PULSE_CLOCK        0x8f
 #define SEND_IMMEDIATE     0x87
 
@@ -344,9 +344,9 @@ int main(int argc, char **argv)
      * Initialize FTDI chip and GPIO pins
      */
     static unsigned char initialize_sequence[] = {
-         0x85,
-         0x8a,
-         0x86, 0x01, 0x00,
+         0x85, // Disconnect TDI/DO from loopback
+         0x8a, // Disable clk divide by 5
+         0x86, INT16(1), // 15MHz
          0x80, 0xe8, 0xeb,
          0x82, 0x20, 0x30,
          0x82, 0x30, 0x00,
@@ -359,8 +359,8 @@ int main(int argc, char **argv)
     static unsigned char item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
-    static unsigned char command_wait_io_high[] = { 0x86, 0x01, 0x00 };
-    ftdi_write_data(ctxitem0z, command_wait_io_high, sizeof(command_wait_io_high));
+    static unsigned char command_set_divisor[] = { 0x86, INT16(1) }; // 15MHz
+    ftdi_write_data(ctxitem0z, command_set_divisor, sizeof(command_set_divisor));
 
     /*
      * Step 5: Check Device ID
@@ -416,9 +416,9 @@ int main(int argc, char **argv)
          JTAG_IRREG(IRREG_ISC_NOOP), EXIT1_TO_IDLE,
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_DONE),
-         PULSE_CLOCK, 0xff, 0xff,
-         PULSE_CLOCK, 0xff, 0xff,
-         PULSE_CLOCK, 0x6b, 0xdc,
+         PULSE_CLOCK, INT16(65535),
+         PULSE_CLOCK, INT16(65535),
+         PULSE_CLOCK, INT16(15000000/80 - 65536 - 65536 - 1), // 12.5 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_01),
          JTAG_IRREG_RW(IRREG_ISC_NOOP), SEND_IMMEDIATE,
@@ -504,7 +504,7 @@ int main(int argc, char **argv)
     static unsigned char item17z[] = {
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_DONE),
-         PULSE_CLOCK, 0x3d, 0x49,
+         PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_01),
          SYNC_PATTERN(0x40, 0x03)
