@@ -386,7 +386,7 @@ int main(int argc, char **argv)
     check_idcode(ctxitem0z, 1);
 
     /*
-     * Enter programming mode
+     * Step 2: Initialization
      */
     static unsigned char item15z[] = {
          IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
@@ -438,14 +438,14 @@ int main(int argc, char **argv)
             int rlen = remaining;
             if (rlen > limit_len)
                 rlen = limit_len;
-            if (last || rlen < limit_len)
+            if (rlen < limit_len)
                 rlen--;                   // last byte is actually loaded with DATAW command
             *readptr++ = DATAW_BYTES;
             *readptr++ = rlen;
             *readptr++ = rlen >> 8;
-            for (i = 0; i < rlen+1; i++)
+            for (i = 0; i <= rlen; i++)
                 *readptr++ = *ptrin++;
-            if (last || rlen+1 < limit_len) {
+            if (rlen < limit_len) {
                 unsigned char ch = *ptrin++;
                 *readptr++ = DATAWBIT;
                 *readptr++ = 0x06;
@@ -464,8 +464,6 @@ int main(int argc, char **argv)
                 ftdi_transfer_data_done(writetc);
             writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
             remaining -= limit_len+1;
-            if (last)
-                break;
             readptr = readbuffer;
         }
         limit_len = MAX_SINGLE_USB_DATA;
