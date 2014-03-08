@@ -141,11 +141,7 @@
 #define SMAP_REG_CMD     0x04  // reg 00100, CMD, Table 5-22
 #define SMAP_REG_STAT    0x07  // reg 00111, STAT, Table 5-25
 #define SMAP_REG_BOOTSTS 0x16  // reg 10110, BOOTSTS, Table 5-35
-#define SMAP_NOOP             SMAP_TYPE1(SMAP_OP_NOP, 0,0)
-#define SMAP_T1W1WORD         SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)
 #define SMAP_DESYNC           0x0000000d  // DESYNC command code, Table 5-22
-#define SMAP_READ_STATUS_REG  SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)
-#define SMAP_READ_BOOTSTS     SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1)
 
 // Type 2 Packet
 #define SMAP_TYPE2(A) (0x40000000 | (A))
@@ -155,7 +151,7 @@
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
           SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
-          SWAP32(SMAP_READ_STATUS_REG), 0x00, 0x00, 0x00,  \
+          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
      SHIFT_TO_UPDATE_TO_IDLE(0),              \
      EXTENDED_COMMAND(0xc4),                  \
@@ -167,13 +163,13 @@
      IDLE_TO_SHIFT_DR,                           \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_DUMMY), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_SYNC), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_NOOP), \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(4), SWAP32(A),          \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_NOOP), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_NOOP), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_T1W1WORD), \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_DESYNC), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_NOOP), \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,       \
      DATAWBIT, 0x06, 0x00,                       \
      SHIFT_TO_EXIT1(0),                          \
@@ -537,7 +533,7 @@ int main(int argc, char **argv)
          PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_01),
-         READ_STAT_REG(SMAP_READ_BOOTSTS)
+         READ_STAT_REG(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1))
     };
     static uint8_t readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
     WRITE_READ(ctxitem0z, item17z, readdata11z);
@@ -558,7 +554,7 @@ int main(int argc, char **argv)
     static uint8_t readdata12z[] = { 0xac, 0xd6 };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
-    static uint8_t item19z[] = { EXIT1_TO_IDLE, READ_STAT_REG(SMAP_READ_STATUS_REG) };
+    static uint8_t item19z[] = { EXIT1_TO_IDLE, READ_STAT_REG(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)) };
     static uint8_t readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
     WRITE_READ(ctxitem0z, item19z, readdata13z);
 
