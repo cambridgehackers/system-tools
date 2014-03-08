@@ -41,8 +41,13 @@
 #define FILE_READSIZE          6464
 #define MAX_SINGLE_USB_DATA    4045
 #define TOKENPASTE4(A, B, C, D) (A ## B ## C ## D)
-#define INT16(A)           ((A) & 0xff), (((A) >> 8) & 0xff)
+#define M(A)               ((A) & 0xff)
+#define INT16(A)           M(A), M((A) >> 8)
 #define INT32(A)           INT16(A), INT16((A) >> 16)
+#define BSWAP(A) ((((A) & 1) << 7) | (((A) & 2) << 5) | (((A) & 4) << 3) | (((A) & 8) << 1) \
+         | (((A) & 0x10) >> 1) | (((A) & 0x20) >> 3) | (((A) & 0x40) >> 5) | (((A) & 0x80) >> 7))
+#define MS(A)              BSWAP(M(A))
+#define SWAP32(A)          MS((A) >> 24), MS((A) >> 16), MS((A) >> 8), MS(A)
 
 // IDCODE from bsd file
 #define IDCODE_XC7K325T    TOKENPASTE4(  \
@@ -128,7 +133,7 @@
      EXTENDED_COMMAND(0xc5),                  \
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
-          INT32(0xffffffff), INT32(0x66aa9955), INT32(0x00000002), \
+          SWAP32(0xffffffff), SWAP32(0xaa995566), SWAP32(0x40000000), \
           INT32(0x80070014), 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
      SHIFT_TO_UPDATE_TO_IDLE(0),              \
@@ -139,15 +144,15 @@
 #define READ_STAT_REG(A) \
      JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,    \
      IDLE_TO_SHIFT_DR,                           \
-     DATAW_BYTES_LEN(4), INT32(0xffffffff), \
-     DATAW_BYTES_LEN(4), INT32(0x66aa9955), \
-     DATAW_BYTES_LEN(4), INT32(0x00000004), \
+     DATAW_BYTES_LEN(4), SWAP32(0xffffffff), \
+     DATAW_BYTES_LEN(4), SWAP32(0xaa995566), \
+     DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
      DATAW_BYTES_LEN(4), INT32(A),          \
-     DATAW_BYTES_LEN(4), INT32(0x00000004), \
-     DATAW_BYTES_LEN(4), INT32(0x00000004), \
-     DATAW_BYTES_LEN(4), INT32(0x8001000c), \
-     DATAW_BYTES_LEN(4), INT32(0xb0000000), \
-     DATAW_BYTES_LEN(4), INT32(0x00000004), \
+     DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
+     DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
+     DATAW_BYTES_LEN(4), SWAP32(0x30008001), \
+     DATAW_BYTES_LEN(4), SWAP32(0x0000000d), \
+     DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
      DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,       \
      DATAWBIT, 0x06, 0x00,                       \
      SHIFT_TO_EXIT1(0),                          \
@@ -184,7 +189,6 @@ static uint8_t readdata8z[] = { INT32(0x7f9e0802), 0x0f };
 
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
-static uint8_t bitswap[256];
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -285,6 +289,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
 
 int main(int argc, char **argv)
 {
+    uint8_t bitswap[256];
     struct ftdi_context *ctxitem0z;
     int i;
     struct ftdi_device_list *devlist, *curdev;
@@ -295,8 +300,7 @@ int main(int argc, char **argv)
         exit(1);
     }
     for (i = 0; i < sizeof(bitswap); i++)
-        bitswap[i] = ((i & 1) << 7) | ((i & 2) << 5) | ((i & 4) << 3) | ((i & 8) << 1)
-         | ((i & 0x10) >> 1) | ((i & 0x20) >> 3) | ((i & 0x40) >> 5) | ((i & 0x80) >> 7);
+        bitswap[i] = BSWAP(i);
     /*
      * Locate USB interface for JTAG
      */
