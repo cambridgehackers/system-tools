@@ -62,7 +62,7 @@
 #define TMSRW   (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
 #define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), INT16((A)-1)//3d
 
-#define DATAR     (MPSSE_DO_READ               |MREAD)               //2c
+#define DATAR(A)  (MPSSE_DO_READ               |MREAD), INT16((A)-1) //2c
 #define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE)//1b
 #define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE) //2e
 #define DATARWBIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE)//3f
@@ -119,12 +119,12 @@
      SHIFT_TO_UPDATE_TO_IDLE_RW(((A) & 0x100)>>1)
 
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
-     DATAR, 0x02, 0x00,                                     \
+     DATAR(3),                                              \
      DATARBIT, 0x06,                                        \
-     SHIFT_TO_UPDATE_TO_IDLE_RW(0),                          \
+     SHIFT_TO_UPDATE_TO_IDLE_RW(0),                         \
      SEND_IMMEDIATE
 
-#define SYNC_PATTERN_SINGLE                   \
+#define READ_STAT_REG_SINGLE                   \
      EXTENDED_COMMAND(0xc5),                  \
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
@@ -136,13 +136,13 @@
      IDLE_TO_SHIFT_DR,                        \
      COMMAND_ENDING
 
-#define SYNC_PATTERN(A,B) \
+#define READ_STAT_REG(A) \
      JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,    \
      IDLE_TO_SHIFT_DR,                           \
      DATAW_BYTES_LEN(4), INT32(0xffffffff), \
      DATAW_BYTES_LEN(4), INT32(0x66aa9955), \
      DATAW_BYTES_LEN(4), INT32(0x00000004), \
-     DATAW_BYTES_LEN(4), 0x14,  (A),  (B), 0x80, \
+     DATAW_BYTES_LEN(4), INT32(A),          \
      DATAW_BYTES_LEN(4), INT32(0x00000004), \
      DATAW_BYTES_LEN(4), INT32(0x00000004), \
      DATAW_BYTES_LEN(4), INT32(0x8001000c), \
@@ -184,6 +184,7 @@ static uint8_t readdata8z[] = { INT32(0x7f9e0802), 0x0f };
 
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
+static uint8_t bitswap[256];
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -270,7 +271,6 @@ static void test_idcode(struct ftdi_context *ftdi)
 static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
     static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
-     //SHIFT_TO_EXIT1(0)  ??
     int j = 3, k = 2;
 
     WRITE_READ(ftdi, item3z, readdata3z);     // IDCODE 00ff
@@ -285,7 +285,6 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
 
 int main(int argc, char **argv)
 {
-    uint8_t bitswap[256];
     struct ftdi_context *ctxitem0z;
     int i;
     struct ftdi_device_list *devlist, *curdev;
@@ -407,7 +406,7 @@ int main(int argc, char **argv)
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
 
-    static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, SYNC_PATTERN_SINGLE };
+    static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, READ_STAT_REG_SINGLE };
     WRITE_READ(ctxitem0z, item13z, readdata8z);
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
     ftdi_transfer_data_done(writetc);
@@ -513,7 +512,7 @@ int main(int argc, char **argv)
          PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_01),
-         SYNC_PATTERN(0x40, 0x03)
+         READ_STAT_REG(0x80034014)
     };
     static uint8_t readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
     WRITE_READ(ctxitem0z, item17z, readdata11z);
@@ -534,7 +533,7 @@ int main(int argc, char **argv)
     static uint8_t readdata12z[] = { 0xac, 0xd6 };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
-    static uint8_t item19z[] = { EXIT1_TO_IDLE, SYNC_PATTERN(0x00, 0x07) };
+    static uint8_t item19z[] = { EXIT1_TO_IDLE, READ_STAT_REG(0x80070014) };
     static uint8_t readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
     WRITE_READ(ctxitem0z, item19z, readdata13z);
 
@@ -557,7 +556,7 @@ int main(int argc, char **argv)
          IN_RESET_STATE,
          TMSW, 0x00, 0x01,  /* ... -> Reset */
          RESET_TO_IDLE,
-         SYNC_PATTERN_SINGLE };
+         READ_STAT_REG_SINGLE };
     WRITE_READ(ctxitem0z, item22z, readdata8z);
 
     writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
