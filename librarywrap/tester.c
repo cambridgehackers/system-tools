@@ -143,44 +143,44 @@
 #define SMAP_REG_CMD     0x04  // reg 00100, CMD, Table 5-22
 #define SMAP_REG_STAT    0x07  // reg 00111, STAT, Table 5-25
 #define SMAP_REG_BOOTSTS 0x16  // reg 10110, BOOTSTS, Table 5-35
-#define SMAP_DESYNC           0x0000000d  // DESYNC command code, Table 5-22
+#define SMAP_DESYNC      0x0000000d  // DESYNC command code, Table 5-22
 
 // Type 2 Packet
-#define SMAP_TYPE2(A) (0x40000000 | (A))
+#define SMAP_TYPE2(LEN) (0x40000000 | (LEN))
 
-#define READ_STAT_REG                   \
-     EXTENDED_COMMAND(IRREG_CFG_IN),                  \
+#define READ_STAT_REG                         \
+     EXTENDED_COMMAND(IRREG_CFG_IN),          \
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
           SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
           SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
      SHIFT_TO_UPDATE_TO_IDLE(0),              \
-     EXTENDED_COMMAND(IRREG_CFG_OUT),                  \
+     EXTENDED_COMMAND(IRREG_CFG_OUT),         \
      IDLE_TO_SHIFT_DR,                        \
      COMMAND_ENDING
 
 #define SEND_SMAP(A) \
-     JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,    \
-     IDLE_TO_SHIFT_DR,                           \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_DUMMY), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_SYNC), \
+     JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE, \
+     IDLE_TO_SHIFT_DR,                        \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_DUMMY),  \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_SYNC),   \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
-     DATAW_BYTES_LEN(4), SWAP32(A),          \
+     DATAW_BYTES_LEN(4), SWAP32(A),           \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_DESYNC), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
-     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,       \
-     DATAWBIT, 0x06, 0x00,                       \
-     SHIFT_TO_EXIT1(0),                          \
-     EXIT1_TO_IDLE,                              \
-     JTAG_IRREG(IRREG_CFG_OUT), EXIT1_TO_IDLE,   \
-     IDLE_TO_SHIFT_DR,                           \
-     DATARW(3), 0x00, 0x00, 0x00,                \
-     DATARWBIT, 0x06, 0x00,                      \
-     SHIFT_TO_EXIT1_RW(0),                       \
+     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,    \
+     DATAWBIT, 0x06, 0x00,                    \
+     SHIFT_TO_EXIT1(0),                       \
+     EXIT1_TO_IDLE,                           \
+     JTAG_IRREG(IRREG_CFG_OUT), EXIT1_TO_IDLE,\
+     IDLE_TO_SHIFT_DR,                        \
+     DATARW(3), 0x00, 0x00, 0x00,             \
+     DATARWBIT, 0x06, 0x00,                   \
+     SHIFT_TO_EXIT1_RW(0),                    \
      SEND_IMMEDIATE
 
 #define PATTERN1 \
