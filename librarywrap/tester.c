@@ -343,6 +343,7 @@ struct ftdi_context *init_ftdi()
 {
     struct ftdi_device_list *devlist, *curdev;
     char serial[64], manuf[64], desc[128];
+    int i;
 
     /*
      * Locate USB interface for JTAG
@@ -379,6 +380,23 @@ struct ftdi_context *init_ftdi()
     ftdi_usb_purge_buffers(ftdi);
     ftdi_usb_purge_rx_buffer(ftdi);
     ftdi_usb_purge_tx_buffer(ftdi);
+
+    /*
+     * Generic command synchronization with ftdi chip
+     */
+    static uint8_t errorcode_fa[] = { 0xfa };
+    for (i = 0; i < 4; i++) {
+        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
+        ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
+        ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
+        static uint8_t readdata1z[] = { 0xaa };
+        ftdi_read_data(ftdi, readdata1z, sizeof(readdata1z));
+    }
+    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
+    ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
+    ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
+    static uint8_t readdata2z[] = { 0xab };
+    ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
     return ftdi;
 }
 
@@ -433,23 +451,6 @@ int main(int argc, char **argv)
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = BSWAP(i);
     ctxitem0z = init_ftdi();
-
-    /*
-     * Step 4: Synchronization
-     */
-    static uint8_t errorcode_fa[] = { 0xfa };
-    for (i = 0; i < 4; i++) {
-        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
-        ftdi_write_data(ctxitem0z, illegal_command, sizeof(illegal_command));
-        ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
-        static uint8_t readdata1z[] = { 0xaa };
-        ftdi_read_data(ctxitem0z, readdata1z, sizeof(readdata1z));
-    }
-    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
-    ftdi_write_data(ctxitem0z, command_ab, sizeof(command_ab));
-    ftdi_read_data(ctxitem0z, errorcode_fa, sizeof(errorcode_fa));
-    static uint8_t readdata2z[] = { 0xab };
-    ftdi_read_data(ctxitem0z, readdata2z, sizeof(readdata2z));
 
     /*
      * Initialize FTDI chip and GPIO pins
