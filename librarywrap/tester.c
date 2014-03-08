@@ -133,27 +133,28 @@
 #define SMAP_SYNC            0xaa995566
 
 // Type 1 Packet
-//                              20000000
-//        NOP                   00
-//        READ                  28
-//        WRITE                 30
-//      register                  xxx
-//      wordcount                    xxx
-#define SMAP_NOOP             0x20000000
-#define SMAP_T1W1WORD         0x30008001  // reg 00100, CommandRegister, Table 5-22
+#define SMAP_TYPE1(OPCODE,REG,COUNT) \
+    (0x20000000 | ((OPCODE) << 27) | ((REG) << 13) | (COUNT))
+#define SMAP_OP_NOP         0
+#define SMAP_OP_READ        1
+#define SMAP_OP_WRITE       2
+#define SMAP_REG_CMD     0x04  // reg 00100, CMD, Table 5-22
+#define SMAP_REG_STAT    0x07  // reg 00111, STAT, Table 5-25
+#define SMAP_REG_BOOTSTS 0x16  // reg 10110, BOOTSTS, Table 5-35
+#define SMAP_NOOP             SMAP_TYPE1(SMAP_OP_NOP, 0,0)
+#define SMAP_T1W1WORD         SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)
 #define SMAP_DESYNC           0x0000000d  // DESYNC command code, Table 5-22
-#define SMAP_READ_STATUS_REG  0x2800e001  // reg 00111, STAT, Table 5-25
-#define SMAP_READ_BOOTSTS     0x2802c001  // reg 10110, BOOTSTS, Table 5-35
+#define SMAP_READ_STATUS_REG  SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)
+#define SMAP_READ_BOOTSTS     SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1)
+
 // Type 2 Packet
-//                              40000000
-//
-#define SMAP_TYPE2_WORD_COUNT 0x40000000
+#define SMAP_TYPE2(A) (0x40000000 | (A))
 
 #define READ_STAT_REG_SINGLE                   \
      EXTENDED_COMMAND(0xc5),                  \
      IDLE_TO_SHIFT_DR,                        \
      DATAW_BYTES_LEN(19),                     \
-          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2_WORD_COUNT), \
+          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
           SWAP32(SMAP_READ_STATUS_REG), 0x00, 0x00, 0x00,  \
      DATAWBIT, 0x06, 0x00,                    \
      SHIFT_TO_UPDATE_TO_IDLE(0),              \
