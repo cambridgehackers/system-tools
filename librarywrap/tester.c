@@ -340,21 +340,21 @@ static uint8_t itor[] = { IDLE_TO_RESET };
 
 struct ftdi_context *init_ftdi()
 {
-    struct ftdi_context *ctxitem0z;
     struct ftdi_device_list *devlist, *curdev;
     char serial[64], manuf[64], desc[128];
+
     /*
      * Locate USB interface for JTAG
      */
-    ctxitem0z = ftdi_new();
-    ftdi_init(ctxitem0z);
-    ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
+    struct ftdi_context *ftdi = ftdi_new();
+    ftdi_init(ftdi);
+    ftdi_usb_find_all(ftdi, &devlist, 0x0, 0x0);
     curdev = devlist;
-    ftdi_usb_get_strings(ctxitem0z, curdev->dev, manuf, sizeof(manuf),
+    ftdi_usb_get_strings(ftdi, curdev->dev, manuf, sizeof(manuf),
         desc, sizeof(desc), serial, sizeof(serial));
     printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
-    ftdi_usb_open_dev(ctxitem0z, curdev->dev);
-    ftdi_usb_reset(ctxitem0z);
+    ftdi_usb_open_dev(ftdi, curdev->dev);
+    ftdi_usb_reset(ftdi);
     ftdi_list_free(&devlist);
 
     /*
@@ -362,23 +362,62 @@ struct ftdi_context *init_ftdi()
      */
     int eeprom_val;
     uint8_t fbuf[256]; // since chiptype is 0x56, eerom size is 256
-    ftdi_read_eeprom(ctxitem0z);
-    ftdi_eeprom_decode(ctxitem0z, 0);
-    ftdi_get_eeprom_value(ctxitem0z, CHIP_TYPE, &eeprom_val);
+    ftdi_read_eeprom(ftdi);
+    ftdi_eeprom_decode(ftdi, 0);
+    ftdi_get_eeprom_value(ftdi, CHIP_TYPE, &eeprom_val);
     printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
-    ftdi_get_eeprom_buf(ctxitem0z, fbuf, sizeof(fbuf));
+    ftdi_get_eeprom_buf(ftdi, fbuf, sizeof(fbuf));
 
     /*
      * Generic initialization of libftdi
      */
-    ftdi_set_baudrate(ctxitem0z, 9600);
-    ftdi_set_latency_timer(ctxitem0z, 255);
-    ftdi_set_bitmode(ctxitem0z, 0, 0);
-    ftdi_set_bitmode(ctxitem0z, 0, 2);
-    ftdi_usb_purge_buffers(ctxitem0z);
-    ftdi_usb_purge_rx_buffer(ctxitem0z);
-    ftdi_usb_purge_tx_buffer(ctxitem0z);
-    return ctxitem0z;
+    ftdi_set_baudrate(ftdi, 9600);
+    ftdi_set_latency_timer(ftdi, 255);
+    ftdi_set_bitmode(ftdi, 0, 0);
+    ftdi_set_bitmode(ftdi, 0, 2);
+    ftdi_usb_purge_buffers(ftdi);
+    ftdi_usb_purge_rx_buffer(ftdi);
+    ftdi_usb_purge_tx_buffer(ftdi);
+    return ftdi;
+}
+
+static void send_data_frame(struct ftdi_context *ftdi, int remaining,
+    uint8_t *ptrin, uint8_t *readbuffer, uint8_t *readptr, int limit_len, int last)
+{
+    int i;
+    while (remaining > 0) {
+        int rlen = remaining;
+        if (rlen > limit_len)
+            rlen = limit_len;
+        if (rlen < limit_len)
+            rlen--;                   // last byte is actually loaded with DATAW command
+        *readptr++ = DATAW_BYTES;
+        *readptr++ = rlen;
+        *readptr++ = rlen >> 8;
+        for (i = 0; i <= rlen; i++)
+            *readptr++ = *ptrin++;
+        if (rlen < limit_len) {
+            uint8_t ch = *ptrin++;
+            *readptr++ = DATAWBIT;
+            *readptr++ = 0x06;
+            *readptr++ = ch;        // 7 bits of data here
+            if (last) {
+                *readptr++ = TMSW; /* Shift-DR -> Exit1-DR */
+                *readptr++ = 0x00;
+                *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
+            }
+            *readptr++ = TMSW; /* if !last, Shift-DR -> Pause-DR;
+                                * if last,  Exit1-DR -> Idle */
+            *readptr++ = 0x01;
+            *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
+        }
+        //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
+        if (writetc)
+            ftdi_transfer_data_done(writetc);
+        writetc = ftdi_write_data_submit(ftdi, readbuffer, readptr - readbuffer);
+        remaining -= limit_len+1;
+        readptr = readbuffer;
+    }
 }
 
 int main(int argc, char **argv)
@@ -510,46 +549,13 @@ int main(int argc, char **argv)
     writetc = NULL;
     while (!last) {
         static uint8_t filebuffer[10000];
-        uint8_t *ptrin = filebuffer;
-
         int remaining = read(inputfd, filebuffer, FILE_READSIZE);
         last = (remaining < FILE_READSIZE);
         for (i = 0; i < remaining; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
         remaining--;
-        while (remaining > 0) {
-            int rlen = remaining;
-            if (rlen > limit_len)
-                rlen = limit_len;
-            if (rlen < limit_len)
-                rlen--;                   // last byte is actually loaded with DATAW command
-            *readptr++ = DATAW_BYTES;
-            *readptr++ = rlen;
-            *readptr++ = rlen >> 8;
-            for (i = 0; i <= rlen; i++)
-                *readptr++ = *ptrin++;
-            if (rlen < limit_len) {
-                uint8_t ch = *ptrin++;
-                *readptr++ = DATAWBIT;
-                *readptr++ = 0x06;
-                *readptr++ = ch;        // 7 bits of data here
-                if (last) {
-                    *readptr++ = TMSW; /* Shift-DR -> Exit1-DR */
-                    *readptr++ = 0x00;
-                    *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
-                }
-                *readptr++ = TMSW; /* if !last, Shift-DR -> Pause-DR;
-                                    * if last,  Exit1-DR -> Idle */
-                *readptr++ = 0x01;
-                *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
-            }
-            //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
-            if (writetc)
-                ftdi_transfer_data_done(writetc);
-            writetc = ftdi_write_data_submit(ctxitem0z, readbuffer, readptr - readbuffer);
-            remaining -= limit_len+1;
-            readptr = readbuffer;
-        }
+        send_data_frame(ctxitem0z, remaining, filebuffer, readbuffer, readptr, limit_len, last);
+        readptr = readbuffer;
         limit_len = MAX_SINGLE_USB_DATA;
         *readptr++ = TMSW; /* TAP state transition: Pause-DR -> Shift-DR */
         *readptr++ = 0x01;
