@@ -382,23 +382,17 @@ struct ftdi_context *init_ftdi()
     return ftdi;
 }
 
-static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
-     IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
-
-static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header,
-    int header_len, int remaining, uint8_t *ptrin, int limit_len, int last,
-    uint8_t *tail, int tail_len)
+static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int header_len,
+    uint8_t *tail, int tail_len, uint8_t *ptrin, int size, int limit_len)
 {
     int i;
-    static uint8_t readbuffer[BUFFER_MAX_LEN];
-    uint8_t *readptr = readbuffer;
-    if (header_len) {
-        memcpy(readptr, header, header_len);
-        readptr += header_len;
-    }
-    //remaining--;
-    while (remaining > 0) {
-        int rlen = remaining-1;
+    static uint8_t packetbuffer[BUFFER_MAX_LEN];
+    uint8_t *readptr = packetbuffer;
+
+    memcpy(readptr, header, header_len);
+    readptr += header_len;
+    while (size > 0) {
+        int rlen = size-1;
         if (rlen > limit_len)
             rlen = limit_len;
         if (rlen < limit_len)
@@ -413,27 +407,16 @@ static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header,
             *readptr++ = DATAWBIT;
             *readptr++ = 0x06;
             *readptr++ = ch;        // 7 bits of data here
-            if (last) {
-                *readptr++ = TMSW; /* Shift-DR -> Exit1-DR */
-                *readptr++ = 0x00;
-                *readptr++ = 0x01 | (0x80 & ch); // 1 bit of data here
-            }
-            /* if !last, Shift-DR -> Pause-DR; * if last,  Exit1-DR -> Idle */
             memcpy(readptr, tail, tail_len);
+            *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
             readptr += tail_len;
-            *(readptr-1) |= 0x80 & ch; // 1 bit of data here
         }
-        //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - readbuffer);
-        if (writetc)
-            ftdi_transfer_data_done(writetc);
-        writetc = ftdi_write_data_submit(ftdi, readbuffer, readptr - readbuffer);
-        remaining -= limit_len+1;
-        readptr = readbuffer;
-    }
-    if (last) {
-        if (writetc)
-            ftdi_transfer_data_done(writetc);
+        //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - packetbuffer);
+        writetc = ftdi_write_data_submit(ftdi, packetbuffer, readptr - packetbuffer);
+        ftdi_transfer_data_done(writetc);
         writetc = NULL;
+        size -= limit_len+1;
+        readptr = packetbuffer;
     }
 }
 
@@ -555,22 +538,32 @@ int main(int argc, char **argv)
 
     printf("Starting to send file '%s'\n", argv[1]);
     inputfd = open(argv[1], O_RDONLY);
-    int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
-    static uint8_t TMS_STATE_1_0[] = {TMSW, 0x01, 0x01};
+    static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
+         IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
     uint8_t *headerp = enter_shift_dr;
     int header_len = sizeof(enter_shift_dr);
+    int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
+    static uint8_t TMS_STATE_1_0[] = {TMSW, 0x01, 0x01};
+    static uint8_t LAST_TMS[] = {
+            TMSW, 0x00, 0x01,            /* Shift-DR -> Exit1-DR */
+            EXIT1_TO_IDLE};
+    uint8_t *tailp = TMS_STATE_1_0;      /* Shift-DR -> Pause-DR */
+    int tail_len = sizeof(TMS_STATE_1_0);
     int last = 0;
-    writetc = NULL;
     while (!last) {
         static uint8_t filebuffer[FILE_READSIZE];
-        int remaining = read(inputfd, filebuffer, FILE_READSIZE);
-        last = (remaining < FILE_READSIZE);
-        for (i = 0; i < remaining; i++)
+        int size = read(inputfd, filebuffer, FILE_READSIZE);
+        last = (size < FILE_READSIZE);
+        if (last) {
+            tailp = LAST_TMS;
+            tail_len = sizeof(LAST_TMS);
+        }
+        for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
-        send_data_frame(ctxitem0z, headerp, header_len, remaining, filebuffer, limit_len, last,
-            TMS_STATE_1_0, sizeof(TMS_STATE_1_0));
+        send_data_frame(ctxitem0z, headerp, header_len, tailp, tail_len,
+            filebuffer, size, limit_len);
         limit_len = MAX_SINGLE_USB_DATA;
-        headerp = TMS_STATE_1_0; /* TAP state transition: Pause-DR -> Shift-DR */
+        headerp = TMS_STATE_1_0;         /* Pause-DR -> Shift-DR */
         header_len = sizeof(TMS_STATE_1_0);
     }
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
