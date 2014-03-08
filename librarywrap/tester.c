@@ -49,6 +49,9 @@
 #define MS(A)              BSWAP(M(A))
 #define SWAP32(A)          MS((A) >> 24), MS((A) >> 16), MS((A) >> 8), MS(A)
 
+/*
+ * Xilinx constants
+ */
 // IDCODE from bsd file
 #define IDCODE_XC7K325T    TOKENPASTE4(  \
       /*XXXX         / version */        \
@@ -60,6 +63,39 @@
 
 #define IDCODE_VALUE INT32(IDCODE_VERSION | IDCODE_XC7K325T)
 
+#define GPIO_DONE            0x10
+#define GPIO_01              0x01
+#define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
+
+#define IRREG_USER2          0x003
+#define IRREG_CFG_OUT        0x004
+#define IRREG_CFG_IN         0x005
+#define IRREG_USERCODE       0x008
+#define IRREG_JPROGRAM       0x00b
+#define IRREG_JSTART         0x00c
+#define IRREG_ISC_NOOP       0x014
+#define IRREG_BYPASS         0x13f
+
+#define SMAP_DUMMY           0xffffffff
+#define SMAP_SYNC            0xaa995566
+
+// Type 1 Packet
+#define SMAP_TYPE1(OPCODE,REG,COUNT) \
+    (0x20000000 | ((OPCODE) << 27) | ((REG) << 13) | (COUNT))
+#define SMAP_OP_NOP         0
+#define SMAP_OP_READ        1
+#define SMAP_OP_WRITE       2
+#define SMAP_REG_CMD     0x04  // CMD register, Table 5-22
+#define SMAP_CMD_DESYNC      0x0000000d  // end of configuration
+#define SMAP_REG_STAT    0x07  // STAT register, Table 5-25
+#define SMAP_REG_BOOTSTS 0x16  // BOOTSTS register, Table 5-35
+
+// Type 2 Packet
+#define SMAP_TYPE2(LEN) (0x40000000 | (LEN))
+
+/*
+ * FTDI constants
+ */
 #define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
 #define MWRITE  (MPSSE_LSB|MPSSE_WRITE_NEG)
 
@@ -92,19 +128,6 @@
      TMSRW, 0x02, ((A) | 0x03)   /* Shift-DR -> Update-DR -> Idle */
 #define FORCE_RETURN_TO_RESET TMSW, 0x04, 0x1f /* go back to TMS reset state */
 
-#define GPIO_DONE            0x10
-#define GPIO_01              0x01
-#define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
-
-#define IRREG_USER2          0x003
-#define IRREG_CFG_OUT        0x004
-#define IRREG_CFG_IN         0x005
-#define IRREG_USERCODE       0x008
-#define IRREG_JPROGRAM       0x00b
-#define IRREG_JSTART         0x00c
-#define IRREG_ISC_NOOP       0x014
-#define IRREG_BYPASS         0x13f
-
 #define JTAG_IRREG(A) \
      IDLE_TO_SHIFT_IR,                                      \
      DATAWBIT, 0x04, (A) & 0xff,                            \
@@ -131,35 +154,6 @@
      SHIFT_TO_UPDATE_TO_IDLE_RW(0),                         \
      SEND_IMMEDIATE
 
-#define SMAP_DUMMY           0xffffffff
-#define SMAP_SYNC            0xaa995566
-
-// Type 1 Packet
-#define SMAP_TYPE1(OPCODE,REG,COUNT) \
-    (0x20000000 | ((OPCODE) << 27) | ((REG) << 13) | (COUNT))
-#define SMAP_OP_NOP         0
-#define SMAP_OP_READ        1
-#define SMAP_OP_WRITE       2
-#define SMAP_REG_CMD     0x04  // reg 00100, CMD, Table 5-22
-#define SMAP_REG_STAT    0x07  // reg 00111, STAT, Table 5-25
-#define SMAP_REG_BOOTSTS 0x16  // reg 10110, BOOTSTS, Table 5-35
-#define SMAP_DESYNC      0x0000000d  // DESYNC command code, Table 5-22
-
-// Type 2 Packet
-#define SMAP_TYPE2(LEN) (0x40000000 | (LEN))
-
-#define READ_STAT_REG                         \
-     EXTENDED_COMMAND(IRREG_CFG_IN),          \
-     IDLE_TO_SHIFT_DR,                        \
-     DATAW_BYTES_LEN(19),                     \
-          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
-          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,                    \
-     SHIFT_TO_UPDATE_TO_IDLE(0),              \
-     EXTENDED_COMMAND(IRREG_CFG_OUT),         \
-     IDLE_TO_SHIFT_DR,                        \
-     COMMAND_ENDING
-
 #define SEND_SMAP(A) \
      JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE, \
      IDLE_TO_SHIFT_DR,                        \
@@ -170,7 +164,7 @@
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_DESYNC), \
+     DATAW_BYTES_LEN(4), SWAP32(SMAP_CMD_DESYNC), \
      DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
      DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,    \
      DATAWBIT, 0x06, 0x00,                    \
@@ -203,8 +197,6 @@
     check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
 
 static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
-static uint8_t item14z[] = { IDLE_TO_RESET };
-static uint8_t readdata8z[] = { INT32(0x7f9e0802), 0x0f };
 
 static struct ftdi_transfer_control* writetc;
 static int inputfd;
@@ -306,13 +298,55 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
         test_idcode(ftdi);
 }
 
+static void read_status(int instance)
+{
+static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
+uint8_t *data;
+int size;
+
+#define READ_STAT_REG                         \
+     EXTENDED_COMMAND(IRREG_CFG_IN),          \
+     IDLE_TO_SHIFT_DR,                        \
+     DATAW_BYTES_LEN(19),                     \
+          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
+          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
+     DATAWBIT, 0x06, 0x00,                    \
+     SHIFT_TO_UPDATE_TO_IDLE(0),              \
+     EXTENDED_COMMAND(IRREG_CFG_OUT),         \
+     IDLE_TO_SHIFT_DR,                        \
+     COMMAND_ENDING
+
+    if (!instance) {
+        static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, READ_STAT_REG };
+        data = item13z;
+        size = sizeof(item13z);
+    }
+    else {
+        static uint8_t item22z[] = {
+             IDLE_TO_RESET,
+             IN_RESET_STATE,
+             TMSW, 0x00, 0x01,  /* ... -> Reset */
+             RESET_TO_IDLE,
+             READ_STAT_REG };
+        data = item22z;
+        size = sizeof(item22z);
+    }
+    writetc = ftdi_write_data_submit(ctxitem0z, data, size);
+    check_ftdi_read_data_submit(ctxitem0z, returned_status, sizeof(returned_status));
+}
+static void idle_to_reset(void)
+{
+static uint8_t itor[] = { IDLE_TO_RESET };
+    ftdi_transfer_data_done(ftdi_write_data_submit(ctxitem0z, itor, sizeof(itor)));
+}
+
 int main(int argc, char **argv)
 {
     uint8_t bitswap[256];
     struct ftdi_context *ctxitem0z;
     int i;
     struct ftdi_device_list *devlist, *curdev;
-    char tempstr0z[64], tempstr2z[64], tempstr1z[128];
+    char serial[64], manuf[64], desc[128];
 
     if (argc != 2) {
         printf("tester <filename>\n");
@@ -327,9 +361,9 @@ int main(int argc, char **argv)
     ftdi_init(ctxitem0z);
     ftdi_usb_find_all(ctxitem0z, &devlist, 0x0, 0x0);
     curdev = devlist;
-    ftdi_usb_get_strings(ctxitem0z, curdev->dev, tempstr2z, sizeof(tempstr2z),
-        tempstr1z, sizeof(tempstr1z), tempstr0z, sizeof(tempstr0z));
-    printf("[%s:%d] %s %s %s\n", __FUNCTION__, __LINE__, tempstr2z, tempstr1z, tempstr0z);
+    ftdi_usb_get_strings(ctxitem0z, curdev->dev, manuf, sizeof(manuf),
+        desc, sizeof(desc), serial, sizeof(serial));
+    printf("[%] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
     ftdi_usb_open_dev(ctxitem0z, curdev->dev);
     ftdi_usb_reset(ctxitem0z);
     ftdi_list_free(&devlist);
@@ -429,10 +463,8 @@ int main(int argc, char **argv)
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
 
-    static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, READ_STAT_REG };
-    WRITE_READ(ctxitem0z, item13z, readdata8z);
-    writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
-    ftdi_transfer_data_done(writetc);
+    read_status(0);
+    idle_to_reset();
 
     check_idcode(ctxitem0z, 1);
 
@@ -529,7 +561,7 @@ int main(int argc, char **argv)
     /*
      * Step 8: Startup
      */
-    static uint8_t item17z[] = {
+    static uint8_t done_sending_data[] = {
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_DONE),
          PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
@@ -537,8 +569,8 @@ int main(int argc, char **argv)
          SET_LSB_DIRECTION(GPIO_01),
          SEND_SMAP(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1))
     };
-    static uint8_t readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
-    WRITE_READ(ctxitem0z, item17z, readdata11z);
+    static uint8_t readdata11z[] = { INT32(0), 0x80 };
+    WRITE_READ(ctxitem0z, done_sending_data, readdata11z);
 
     static uint8_t item18z[] = {
          EXIT1_TO_IDLE,
@@ -577,16 +609,8 @@ int main(int argc, char **argv)
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
 
-    static uint8_t item22z[] = {
-         IDLE_TO_RESET,
-         IN_RESET_STATE,
-         TMSW, 0x00, 0x01,  /* ... -> Reset */
-         RESET_TO_IDLE,
-         READ_STAT_REG };
-    WRITE_READ(ctxitem0z, item22z, readdata8z);
-
-    writetc = ftdi_write_data_submit(ctxitem0z, item14z, sizeof(item14z));
-    ftdi_transfer_data_done(writetc);
+    read_status(1);
+    idle_to_reset();
     ftdi_deinit(ctxitem0z);
     return 0;
 }
