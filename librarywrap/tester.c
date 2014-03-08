@@ -391,6 +391,7 @@ static void send_data_frame(struct ftdi_context *ftdi, int first_record, int rem
     static uint8_t readbuffer[BUFFER_MAX_LEN];
     uint8_t *readptr = readbuffer;
     if (first_record) {
+        writetc = NULL;
         memcpy(readptr, enter_shift_dr, sizeof(enter_shift_dr));
         readptr += sizeof(enter_shift_dr);
     }
@@ -399,6 +400,7 @@ static void send_data_frame(struct ftdi_context *ftdi, int first_record, int rem
         *readptr++ = 0x01;
         *readptr++ = 0x01;
     }
+    remaining--;
     while (remaining > 0) {
         int rlen = remaining;
         if (rlen > limit_len)
@@ -560,14 +562,12 @@ int main(int argc, char **argv)
     inputfd = open(argv[1], O_RDONLY);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
     int last = 0;
-    writetc = NULL;
     while (!last) {
         static uint8_t filebuffer[FILE_READSIZE];
         int remaining = read(inputfd, filebuffer, FILE_READSIZE);
         last = (remaining < FILE_READSIZE);
         for (i = 0; i < remaining; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
-        remaining--;
         send_data_frame(ctxitem0z, first_record, remaining, filebuffer, limit_len, last);
         limit_len = MAX_SINGLE_USB_DATA;
         first_record = 0;
