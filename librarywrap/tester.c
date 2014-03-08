@@ -298,7 +298,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
         test_idcode(ftdi);
 }
 
-static void read_status(int instance)
+static void read_status(struct ftdi_context *ftdi, int instance)
 {
 static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
 uint8_t *data;
@@ -331,29 +331,18 @@ int size;
         data = item22z;
         size = sizeof(item22z);
     }
-    writetc = ftdi_write_data_submit(ctxitem0z, data, size);
-    check_ftdi_read_data_submit(ctxitem0z, returned_status, sizeof(returned_status));
-}
-static void idle_to_reset(void)
-{
+    writetc = ftdi_write_data_submit(ftdi, data, size);
+    check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
+
 static uint8_t itor[] = { IDLE_TO_RESET };
-    ftdi_transfer_data_done(ftdi_write_data_submit(ctxitem0z, itor, sizeof(itor)));
+    ftdi_transfer_data_done(ftdi_write_data_submit(ftdi, itor, sizeof(itor)));
 }
 
-int main(int argc, char **argv)
+struct ftdi_context *init_ftdi()
 {
-    uint8_t bitswap[256];
     struct ftdi_context *ctxitem0z;
-    int i;
     struct ftdi_device_list *devlist, *curdev;
     char serial[64], manuf[64], desc[128];
-
-    if (argc != 2) {
-        printf("tester <filename>\n");
-        exit(1);
-    }
-    for (i = 0; i < sizeof(bitswap); i++)
-        bitswap[i] = BSWAP(i);
     /*
      * Locate USB interface for JTAG
      */
@@ -363,7 +352,7 @@ int main(int argc, char **argv)
     curdev = devlist;
     ftdi_usb_get_strings(ctxitem0z, curdev->dev, manuf, sizeof(manuf),
         desc, sizeof(desc), serial, sizeof(serial));
-    printf("[%] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
+    printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
     ftdi_usb_open_dev(ctxitem0z, curdev->dev);
     ftdi_usb_reset(ctxitem0z);
     ftdi_list_free(&devlist);
@@ -389,6 +378,22 @@ int main(int argc, char **argv)
     ftdi_usb_purge_buffers(ctxitem0z);
     ftdi_usb_purge_rx_buffer(ctxitem0z);
     ftdi_usb_purge_tx_buffer(ctxitem0z);
+    return ctxitem0z;
+}
+
+int main(int argc, char **argv)
+{
+    uint8_t bitswap[256];
+    struct ftdi_context *ctxitem0z;
+    int i;
+
+    if (argc != 2) {
+        printf("tester <filename>\n");
+        exit(1);
+    }
+    for (i = 0; i < sizeof(bitswap); i++)
+        bitswap[i] = BSWAP(i);
+    ctxitem0z = init_ftdi();
 
     /*
      * Step 4: Synchronization
@@ -462,10 +467,7 @@ int main(int argc, char **argv)
         static uint8_t readdata7z[] = { 0xaf, 0xf5 };
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
-
-    read_status(0);
-    idle_to_reset();
-
+    read_status(ctxitem0z, 0);
     check_idcode(ctxitem0z, 1);
 
     /*
@@ -608,9 +610,8 @@ int main(int argc, char **argv)
     static uint8_t readdata14z[] = { 0xa9, 0xf5 };
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
+    read_status(ctxitem0z, 1);
 
-    read_status(1);
-    idle_to_reset();
     ftdi_deinit(ctxitem0z);
     return 0;
 }
