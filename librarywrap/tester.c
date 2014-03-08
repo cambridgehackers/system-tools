@@ -147,7 +147,7 @@
      DATAW_BYTES_LEN(4), SWAP32(0xffffffff), \
      DATAW_BYTES_LEN(4), SWAP32(0xaa995566), \
      DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
-     DATAW_BYTES_LEN(4), INT32(A),          \
+     DATAW_BYTES_LEN(4), SWAP32(A),          \
      DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
      DATAW_BYTES_LEN(4), SWAP32(0x20000000), \
      DATAW_BYTES_LEN(4), SWAP32(0x30008001), \
@@ -516,7 +516,7 @@ int main(int argc, char **argv)
          PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
          SET_LSB_DIRECTION(GPIO_01),
-         READ_STAT_REG(0x80034014)
+         READ_STAT_REG(0x2802c001)
     };
     static uint8_t readdata11z[] = { 0x00, 0x00, 0x00, 0x00, 0x80 };
     WRITE_READ(ctxitem0z, item17z, readdata11z);
@@ -537,7 +537,7 @@ int main(int argc, char **argv)
     static uint8_t readdata12z[] = { 0xac, 0xd6 };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
-    static uint8_t item19z[] = { EXIT1_TO_IDLE, READ_STAT_REG(0x80070014) };
+    static uint8_t item19z[] = { EXIT1_TO_IDLE, READ_STAT_REG(0x2800e001) };
     static uint8_t readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
     WRITE_READ(ctxitem0z, item19z, readdata13z);
 
