@@ -381,10 +381,24 @@ struct ftdi_context *init_ftdi()
     return ftdi;
 }
 
-static void send_data_frame(struct ftdi_context *ftdi, int remaining,
-    uint8_t *ptrin, uint8_t *readbuffer, uint8_t *readptr, int limit_len, int last)
+static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
+     IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
+
+static void send_data_frame(struct ftdi_context *ftdi, int first_record, int remaining,
+    uint8_t *ptrin, int limit_len, int last)
 {
     int i;
+    static uint8_t readbuffer[BUFFER_MAX_LEN];
+    uint8_t *readptr = readbuffer;
+    if (first_record) {
+        memcpy(readptr, enter_shift_dr, sizeof(enter_shift_dr));
+        readptr += sizeof(enter_shift_dr);
+    }
+    else {
+        *readptr++ = TMSW; /* TAP state transition: Pause-DR -> Shift-DR */
+        *readptr++ = 0x01;
+        *readptr++ = 0x01;
+    }
     while (remaining > 0) {
         int rlen = remaining;
         if (rlen > limit_len)
@@ -417,6 +431,11 @@ static void send_data_frame(struct ftdi_context *ftdi, int remaining,
         writetc = ftdi_write_data_submit(ftdi, readbuffer, readptr - readbuffer);
         remaining -= limit_len+1;
         readptr = readbuffer;
+    }
+    if (last) {
+        if (writetc)
+            ftdi_transfer_data_done(writetc);
+        writetc = NULL;
     }
 }
 
@@ -537,33 +556,22 @@ int main(int argc, char **argv)
     WRITE_READ(ctxitem0z, item16z, readdata10z);
 
     printf("Starting to send file '%s'\n", argv[1]);
-    static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
-         IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
+    int first_record = 1;
     inputfd = open(argv[1], O_RDONLY);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
     int last = 0;
-    static uint8_t readbuffer[BUFFER_MAX_LEN];
-    uint8_t *readptr = readbuffer;
-    memcpy(readptr, enter_shift_dr, sizeof(enter_shift_dr));
-    readptr += sizeof(enter_shift_dr);
     writetc = NULL;
     while (!last) {
-        static uint8_t filebuffer[10000];
+        static uint8_t filebuffer[FILE_READSIZE];
         int remaining = read(inputfd, filebuffer, FILE_READSIZE);
         last = (remaining < FILE_READSIZE);
         for (i = 0; i < remaining; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
         remaining--;
-        send_data_frame(ctxitem0z, remaining, filebuffer, readbuffer, readptr, limit_len, last);
-        readptr = readbuffer;
+        send_data_frame(ctxitem0z, first_record, remaining, filebuffer, limit_len, last);
         limit_len = MAX_SINGLE_USB_DATA;
-        *readptr++ = TMSW; /* TAP state transition: Pause-DR -> Shift-DR */
-        *readptr++ = 0x01;
-        *readptr++ = 0x01;
+        first_record = 0;
     }
-    if (writetc)
-        ftdi_transfer_data_done(writetc);
-    writetc = NULL;
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
     /*
