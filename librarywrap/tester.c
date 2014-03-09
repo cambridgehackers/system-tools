@@ -164,6 +164,7 @@
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff)
+#define DITEM(...) {sizeof((uint8_t[]){ __VA_ARGS__ }), __VA_ARGS__}
 
 #define WRITE_READ(FTDI, A, B) \
     writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
@@ -257,10 +258,9 @@ static uint8_t *pulse_gpio(int delay, int *size)
 #define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
 
     static uint8_t prebuffer[BUFFER_MAX_LEN];
-    static uint8_t pulsepre[] = {
-         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
-         SET_LSB_DIRECTION(GPIO_DONE),
-    };
+    static uint8_t pulsepre[] =
+      DITEM(SET_LSB_DIRECTION(GPIO_DONE | GPIO_01), \
+            SET_LSB_DIRECTION(GPIO_DONE));
     static uint8_t pulse65k[] = {
          PULSE_CLOCK, INT16(65536 - 1)
     };
@@ -269,8 +269,8 @@ static uint8_t *pulse_gpio(int delay, int *size)
          SET_LSB_DIRECTION(GPIO_01)
     };
     uint8_t *ptr = prebuffer;
-    memcpy(ptr, pulsepre, sizeof(pulsepre));
-    ptr += sizeof(pulsepre);
+    memcpy(ptr, pulsepre+1, pulsepre[0]);
+    ptr += pulsepre[0];
     while(delay > 65536) {
         memcpy(ptr, pulse65k, sizeof(pulse65k));
         ptr += sizeof(pulse65k);
