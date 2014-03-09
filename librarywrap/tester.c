@@ -190,7 +190,7 @@
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
          INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), 0xff
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff)
 
 #define WRITE_READ(FTDI, A, B) \
     writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
@@ -435,7 +435,6 @@ static uint8_t finish_req[] = {
     }
     send_data_frame(ftdi, 0, data, size, finish_req, sizeof(finish_req),
         request_data, sizeof(request_data), 9999);
-    //static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
     static uint8_t returned_status[] = { 2, SWAP32(0x1079fef0) };
     check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
     union {
@@ -488,20 +487,21 @@ int main(int argc, char **argv)
     /*
      * Step 5: Check Device ID
      */
-    static uint8_t generic_read_idcode[] = {
+    static uint8_t idstart[] = {
          TMSW, 0x00, 0x01,  /* ... -> Reset */
          IN_RESET_STATE,
          TMSW, 0x00, 0x01,  /* ... -> Reset */
          IN_RESET_STATE,
          RESET_TO_IDLE,
-         IDLE_TO_SHIFT_DR,
-         DATARW(0x7f), PATTERN2, 0xff, 0xff,
-         DATARWBIT, 0x06, 0xff,
-         TMSRW, 0x01, 0x81, /* Shift-DR -> Pause-DR */
-         SEND_IMMEDIATE,
-    };
-    static uint8_t readdata5z[] = { IDCODE_VALUE, PATTERN2 };
-    WRITE_READ(ctxitem0z, generic_read_idcode, readdata5z);     // IDCODE ffff
+         IDLE_TO_SHIFT_DR};
+    static uint8_t iddata[] = { PATTERN2, INT32(0xffffffff) };
+    static uint8_t idfinal[] = {
+         TMSRW, 0x01, 0x01, /* Shift-DR -> Pause-DR */
+         SEND_IMMEDIATE};
+    static uint8_t readdata5z[] = { IDCODE_VALUE, PATTERN2, 0xff };
+    send_data_frame(ctxitem0z, MPSSE_DO_READ|MREAD, idstart, sizeof(idstart), idfinal, sizeof(idfinal),
+        iddata, sizeof(iddata), 9999);
+    check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z));
 
     static uint8_t item11z[] = {
          FORCE_RETURN_TO_RESET,
