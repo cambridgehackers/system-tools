@@ -149,12 +149,6 @@
      DATARWBIT, 0x04, M(0xc0 | (A)),                        \
      SHIFT_TO_UPDATE_TO_IDLE_RW(((A) & 0x100)>>1)
 
-#define COMMAND_ENDING  /* Enters in Shift-DR */            \
-     DATAR(3),                                              \
-     DATARBIT, 0x06,                                        \
-     SHIFT_TO_UPDATE_TO_IDLE_RW(0),                         \
-     SEND_IMMEDIATE
-
 #define PATTERN1 \
          INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
          INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
@@ -309,29 +303,32 @@ static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *he
     }
 }
 
+#define COMMAND_ENDING  /* Enters in Shift-DR */            \
+     DATAR(3),                                              \
+     DATARBIT, 0x06,                                        \
+     SHIFT_TO_UPDATE_TO_IDLE_RW(0),                         \
+     SEND_IMMEDIATE
+
 static void test_pattern(struct ftdi_context *ftdi)
 {
-#define DATA_ITEM \
+#define DATA_ITEM(...) \
      EXTENDED_COMMAND(IRREG_BYPASS), \
-     EXTENDED_COMMAND(IRREG_USER2)
+     EXTENDED_COMMAND(IRREG_USER2),  \
+     IDLE_TO_SHIFT_DR,               \
+     __VA_ARGS__                     \
+     COMMAND_ENDING
 
-    static uint8_t item5z[] = { DATA_ITEM, IDLE_TO_SHIFT_DR, COMMAND_ENDING };
+    static uint8_t item5z[] = { DATA_ITEM( ) };
     static uint8_t item6z[] = {
-         DATA_ITEM,
-         IDLE_TO_SHIFT_DR,
-         DATAW(1), 0x69, /* in Shift-DR */
-         DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
-         COMMAND_ENDING,
+         DATA_ITEM( DATAW(1), 0x69,       /* in Shift-DR */    \
+                    DATAWBIT, 0x01, 0x00, ) /* in Shift-DR */
     };
     static uint8_t item7z[] = {
-         DATA_ITEM,
-         IDLE_TO_SHIFT_DR,
-         DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
-         SHIFT_TO_UPDATE_TO_IDLE(0),
-         IDLE_TO_SHIFT_DR,
-         DATAW(1), 0x69, /* in Shift-DR */
-         DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
-         COMMAND_ENDING,
+         DATA_ITEM( DATAWBIT, 0x04, 0x0c, /* in Shift-DR */    \
+                    SHIFT_TO_UPDATE_TO_IDLE(0),                \
+                    IDLE_TO_SHIFT_DR,                          \
+                    DATAW(1), 0x69,       /* in Shift-DR */    \
+                    DATAWBIT, 0x01, 0x00, ) /* in Shift-DR */
     };
     static uint8_t readdata_five_zeros[] = { INT32(0), 0x00 };
     int i;
@@ -438,6 +435,7 @@ static uint8_t smap1[] = {
      DATAW(4), SWAP32(SMAP_SYNC),
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
      DATAW(4),};
+uint8_t temp[sizeof(data)] = {SWAP32(data)};
 
 static uint8_t smap2[] = {
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
@@ -445,9 +443,8 @@ static uint8_t smap2[] = {
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
      DATAW(4), SWAP32(SMAP_CMD_DESYNC),
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-     //DATAW(3), 0x04, 0x00, 0x00,
-     //DATAWBIT, 0x06, 0x00,
      };
+static uint8_t request_data[] = {INT32(4)};
 static uint8_t smap3[] = {
      SHIFT_TO_EXIT1(0),
      EXIT1_TO_IDLE,
@@ -457,7 +454,6 @@ static uint8_t smap3[] = {
      DATARWBIT, 0x06, 0x00,
      SHIFT_TO_EXIT1_RW(0),
      SEND_IMMEDIATE };
-uint8_t temp[sizeof(data)] = {SWAP32(data)};
 
     uint8_t *ptr = prebuffer;
     memcpy(ptr, prefix, prefix_len);
@@ -468,10 +464,6 @@ uint8_t temp[sizeof(data)] = {SWAP32(data)};
     ptr += sizeof(temp);
     memcpy(ptr, smap2, sizeof(smap2));
     ptr += sizeof(smap2);
-    //memcpy(ptr, smap3, sizeof(smap3));
-    //ptr += sizeof(smap3);
-    //writetc = ftdi_write_data_submit(ftdi, prebuffer, ptr - prebuffer);
-static uint8_t request_data[] = {INT32(4)};
     send_data_frame(ftdi, 0, prebuffer, ptr - prebuffer, smap3, sizeof(smap3),
         request_data, sizeof(request_data), 9999);
     check_ftdi_read_data_submit(ftdi, rdata, rdata_len);
