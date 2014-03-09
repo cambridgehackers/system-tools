@@ -292,6 +292,44 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf,
     }
 }
 
+static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int header_len,
+    uint8_t *tail, int tail_len, uint8_t *ptrin, int size, int limit_len)
+{
+    int i;
+    static uint8_t packetbuffer[BUFFER_MAX_LEN];
+    uint8_t *readptr = packetbuffer;
+
+    memcpy(readptr, header, header_len);
+    readptr += header_len;
+    while (size > 0) {
+        int rlen = size-1;
+        if (rlen > limit_len)
+            rlen = limit_len;
+        if (rlen < limit_len)
+            rlen--;                   // last byte is actually loaded with DATAW command
+        *readptr++ = DATAW_BYTES;
+        *readptr++ = rlen;
+        *readptr++ = rlen >> 8;
+        for (i = 0; i <= rlen; i++)
+            *readptr++ = *ptrin++;
+        if (rlen < limit_len) {
+            uint8_t ch = *ptrin++;
+            *readptr++ = DATAWBIT;
+            *readptr++ = 0x06;
+            *readptr++ = ch;        // 7 bits of data here
+            memcpy(readptr, tail, tail_len);
+            *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
+            readptr += tail_len;
+        }
+        //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - packetbuffer);
+        writetc = ftdi_write_data_submit(ftdi, packetbuffer, readptr - packetbuffer);
+        ftdi_transfer_data_done(writetc);
+        writetc = NULL;
+        size -= limit_len+1;
+        readptr = packetbuffer;
+    }
+}
+
 static void test_pattern(struct ftdi_context *ftdi)
 {
 #define DATA_ITEM \
@@ -326,18 +364,22 @@ static void test_pattern(struct ftdi_context *ftdi)
     }
 }
 
-#define IDTEST_PATTERN                          \
+#define IDTEST_PATTERN1                         \
      TMSW, 0x04, 0x7f, /* Reset????? */         \
-     TMSW, 0x03, 0x02, /* Reset -> Shift-DR */  \
+     TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
+#define IDTEST_PATTERN2                         \
      DATARW(63), PATTERN1, 0xff, 0x00, 0x00,    \
-     DATARWBIT, 0x06, 0x00,                     \
+     DATARWBIT, 0x06, 0x00
+#define IDTEST_PATTERN3                         \
      SHIFT_TO_UPDATE_TO_IDLE_RW(0),             \
      SEND_IMMEDIATE
 
 static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
+static uint8_t patdata[] =  {PATTERN1, 0xff, 0x00, 0x00, 0x00};
+static uint8_t pat3[] = {IDTEST_PATTERN3};
 static void test_idcode(struct ftdi_context *ftdi)
 {
-    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN };
+    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN1, IDTEST_PATTERN2, IDTEST_PATTERN3 };
     int j;
     WRITE_READ(ftdi, item4z, readdata3z);     // IDCODE 00ff
     for (j = 0; j < 3; j++)
@@ -346,7 +388,7 @@ static void test_idcode(struct ftdi_context *ftdi)
 
 static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
-    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
+    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN1, IDTEST_PATTERN2, IDTEST_PATTERN3 };
     int j = 3, k = 2;
 
     WRITE_READ(ftdi, item3z, readdata3z);     // IDCODE 00ff
@@ -405,44 +447,6 @@ int i, size;
         status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
     static uint8_t itor[] = { IDLE_TO_RESET };
     ftdi_transfer_data_done(ftdi_write_data_submit(ftdi, itor, sizeof(itor)));
-}
-
-static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int header_len,
-    uint8_t *tail, int tail_len, uint8_t *ptrin, int size, int limit_len)
-{
-    int i;
-    static uint8_t packetbuffer[BUFFER_MAX_LEN];
-    uint8_t *readptr = packetbuffer;
-
-    memcpy(readptr, header, header_len);
-    readptr += header_len;
-    while (size > 0) {
-        int rlen = size-1;
-        if (rlen > limit_len)
-            rlen = limit_len;
-        if (rlen < limit_len)
-            rlen--;                   // last byte is actually loaded with DATAW command
-        *readptr++ = DATAW_BYTES;
-        *readptr++ = rlen;
-        *readptr++ = rlen >> 8;
-        for (i = 0; i <= rlen; i++)
-            *readptr++ = *ptrin++;
-        if (rlen < limit_len) {
-            uint8_t ch = *ptrin++;
-            *readptr++ = DATAWBIT;
-            *readptr++ = 0x06;
-            *readptr++ = ch;        // 7 bits of data here
-            memcpy(readptr, tail, tail_len);
-            *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
-            readptr += tail_len;
-        }
-        //printf("[%s:%d] len %ld\n", __FUNCTION__, __LINE__, readptr - packetbuffer);
-        writetc = ftdi_write_data_submit(ftdi, packetbuffer, readptr - packetbuffer);
-        ftdi_transfer_data_done(writetc);
-        writetc = NULL;
-        size -= limit_len+1;
-        readptr = packetbuffer;
-    }
 }
 
 int main(int argc, char **argv)
