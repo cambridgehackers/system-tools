@@ -86,7 +86,7 @@
 #define SMAP_OP_READ        1
 #define SMAP_OP_WRITE       2
 #define SMAP_REG_CMD     0x04  // CMD register, Table 5-22
-#define SMAP_CMD_DESYNC      0x0000000d  // end of configuration
+#define     SMAP_CMD_DESYNC 0x0000000d  // end of configuration
 #define SMAP_REG_STAT    0x07  // STAT register, Table 5-25
 #define SMAP_REG_BOOTSTS 0x16  // BOOTSTS register, Table 5-35
 
@@ -98,17 +98,18 @@
  */
 #define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
 #define MWRITE  (MPSSE_LSB|MPSSE_WRITE_NEG)
+#define DREAD   (MPSSE_DO_READ  | MREAD)
+#define DWRITE  (MPSSE_DO_WRITE | MWRITE)
 
-#define TMSW    (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE)//4b
-#define TMSRW   (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
+#define TMSW  (MPSSE_WRITE_TMS      |MWRITE|MPSSE_BITMODE)//4b
+#define TMSRW (MPSSE_WRITE_TMS|DREAD|MWRITE|MPSSE_BITMODE)//6f
 
-#define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE)//1b
-#define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE) //2e
-#define DATARWBIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE)//3f
-#define DATAW_BYTES (MPSSE_DO_WRITE | MWRITE)
-#define DATAW_BYTES_LEN(A) DATAW_BYTES, INT16((A)-1)
-#define DATAR(A)  (MPSSE_DO_READ               |MREAD), INT16((A)-1) //2c
-#define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), INT16((A)-1)//3d
+#define DATAWBIT  (DWRITE|MPSSE_BITMODE)       //1b
+#define DATARBIT  (DREAD |MPSSE_BITMODE)       //2e
+#define DATARWBIT (DREAD |DWRITE|MPSSE_BITMODE)//3f
+#define DATAW(A)          DWRITE, INT16((A)-1) //19
+#define DATAR(A)           DREAD, INT16((A)-1) //2c
+#define DATARW(A) (DREAD|DWRITE), INT16((A)-1) //3d
 #define PULSE_CLOCK        0x8f
 #define SEND_IMMEDIATE     0x87
 
@@ -130,51 +131,28 @@
 
 #define JTAG_IRREG(A) \
      IDLE_TO_SHIFT_IR,                                      \
-     DATAWBIT, 0x04, (A) & 0xff,                            \
+     DATAWBIT, 0x04, M(A),                                  \
      SHIFT_TO_EXIT1(((A) & 0x100)>>1)
 
 #define JTAG_IRREG_RW(A) \
      IDLE_TO_SHIFT_IR,                                      \
-     DATARWBIT, 0x04, (A) & 0xff,                           \
+     DATARWBIT, 0x04, M(A),                                 \
      SHIFT_TO_EXIT1_RW(((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND(A) \
      IDLE_TO_SHIFT_IR,                                      \
-     DATAWBIT, 0x04, (0xc0 | (A)) & 0xff,                            \
+     DATAWBIT, 0x04, M(0xc0 | (A)),                         \
      SHIFT_TO_UPDATE_TO_IDLE(((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND_RW(A) \
      IDLE_TO_SHIFT_IR,                                      \
-     DATARWBIT, 0x04, (0xc0 | (A)) & 0xff,                           \
+     DATARWBIT, 0x04, M(0xc0 | (A)),                        \
      SHIFT_TO_UPDATE_TO_IDLE_RW(((A) & 0x100)>>1)
 
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
      DATAR(3),                                              \
      DATARBIT, 0x06,                                        \
      SHIFT_TO_UPDATE_TO_IDLE_RW(0),                         \
-     SEND_IMMEDIATE
-
-#define SEND_SMAP(A) \
-     JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE, \
-     IDLE_TO_SHIFT_DR,                        \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_DUMMY),  \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_SYNC),   \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
-     DATAW_BYTES_LEN(4), SWAP32(A),           \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_CMD_DESYNC), \
-     DATAW_BYTES_LEN(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)), \
-     DATAW_BYTES_LEN(3), 0x04, 0x00, 0x00,    \
-     DATAWBIT, 0x06, 0x00,                    \
-     SHIFT_TO_EXIT1(0),                       \
-     EXIT1_TO_IDLE,                           \
-     JTAG_IRREG(IRREG_CFG_OUT), EXIT1_TO_IDLE,\
-     IDLE_TO_SHIFT_DR,                        \
-     DATARW(3), 0x00, 0x00, 0x00,             \
-     DATARWBIT, 0x06, 0x00,                   \
-     SHIFT_TO_EXIT1_RW(0),                    \
      SEND_IMMEDIATE
 
 #define PATTERN1 \
@@ -308,7 +286,7 @@ static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *he
             rlen = limit_len;
         if (rlen < limit_len)
             rlen--;                   // last byte is actually loaded with DATAW command
-        *readptr++ = DATAW_BYTES | read;
+        *readptr++ = DWRITE | read;
         *readptr++ = rlen;
         *readptr++ = rlen >> 8;
         for (i = 0; i <= rlen; i++)
@@ -341,7 +319,7 @@ static void test_pattern(struct ftdi_context *ftdi)
     static uint8_t item6z[] = {
          DATA_ITEM,
          IDLE_TO_SHIFT_DR,
-         DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
+         DATAW(1), 0x69, /* in Shift-DR */
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
          COMMAND_ENDING,
     };
@@ -351,7 +329,7 @@ static void test_pattern(struct ftdi_context *ftdi)
          DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
          SHIFT_TO_UPDATE_TO_IDLE(0),
          IDLE_TO_SHIFT_DR,
-         DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
+         DATAW(1), 0x69, /* in Shift-DR */
          DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
          COMMAND_ENDING,
     };
@@ -447,6 +425,49 @@ static uint8_t finish_req[] = {
         status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
     static uint8_t itor[] = { IDLE_TO_RESET };
     ftdi_transfer_data_done(ftdi_write_data_submit(ftdi, itor, sizeof(itor)));
+}
+
+static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, int prefix_len, uint32_t data,
+    uint8_t *rdata, int rdata_len)
+{
+    static uint8_t packetbuffer[BUFFER_MAX_LEN];
+static uint8_t smap1[] = {
+     JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,
+     IDLE_TO_SHIFT_DR,
+     DATAW(4), SWAP32(SMAP_DUMMY),
+     DATAW(4), SWAP32(SMAP_SYNC),
+     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+     DATAW(4),};
+ //SWAP32(A),         
+static uint8_t smap2[] = {
+     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
+     DATAW(4), SWAP32(SMAP_CMD_DESYNC),
+     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+     DATAW(3), 0x04, 0x00, 0x00,
+     DATAWBIT, 0x06, 0x00,
+     SHIFT_TO_EXIT1(0),
+     EXIT1_TO_IDLE,
+     JTAG_IRREG(IRREG_CFG_OUT), EXIT1_TO_IDLE,
+     IDLE_TO_SHIFT_DR,
+     DATARW(3), 0x00, 0x00, 0x00,
+     DATARWBIT, 0x06, 0x00,
+     SHIFT_TO_EXIT1_RW(0),
+     SEND_IMMEDIATE };
+
+    uint8_t *ptr = packetbuffer;
+    memcpy(ptr, prefix, prefix_len);
+    ptr += prefix_len;
+    memcpy(ptr, smap1, sizeof(smap1));
+    ptr += sizeof(smap1);
+uint8_t temp[sizeof(data)] = {SWAP32(data)};
+    memcpy(ptr, temp, sizeof(temp));
+    ptr += sizeof(temp);
+    memcpy(ptr, smap2, sizeof(smap2));
+    ptr += sizeof(smap2);
+    writetc = ftdi_write_data_submit(ftdi, packetbuffer, ptr - packetbuffer);
+    check_ftdi_read_data_submit(ftdi, rdata, rdata_len);
 }
 
 int main(int argc, char **argv)
@@ -551,7 +572,7 @@ int main(int argc, char **argv)
     printf("Starting to send file '%s'\n", argv[1]);
     int inputfd = open(argv[1], O_RDONLY);
     static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
-         IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
+         IDLE_TO_SHIFT_DR, DATAW(4), 0x00, 0x00, 0x00, 0x00 };
     uint8_t *headerp = enter_shift_dr;
     int header_len = sizeof(enter_shift_dr);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
@@ -588,11 +609,12 @@ int main(int argc, char **argv)
          SET_LSB_DIRECTION(GPIO_DONE),
          PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
-         SET_LSB_DIRECTION(GPIO_01),
-         SEND_SMAP(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1))
+         SET_LSB_DIRECTION(GPIO_01)
     };
     static uint8_t readdata11z[] = { INT32(0), 0x80 };
-    WRITE_READ(ctxitem0z, done_sending_data, readdata11z);
+    send_smap(ctxitem0z, done_sending_data, sizeof(done_sending_data),
+         SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1),
+         readdata11z, sizeof(readdata11z));
 
     static uint8_t item18z[] = {
          EXIT1_TO_IDLE,
@@ -610,12 +632,11 @@ int main(int argc, char **argv)
     static uint8_t readdata12z[] = { 0xac, 0xd6 };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
-    static uint8_t item19z[] = {
-        EXIT1_TO_IDLE,
-        SEND_SMAP(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1))
-    };
+    static uint8_t item19z[] = { EXIT1_TO_IDLE };
     static uint8_t readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
-    WRITE_READ(ctxitem0z, item19z, readdata13z);
+    send_smap(ctxitem0z, item19z, sizeof(item19z),
+         SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1),
+         readdata13z, sizeof(readdata13z));
 
     static uint8_t item20z[] = { EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_BYPASS), EXIT1_TO_IDLE };
