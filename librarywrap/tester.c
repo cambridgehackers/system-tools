@@ -430,7 +430,7 @@ static uint8_t finish_req[] = {
 static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, int prefix_len, uint32_t data,
     uint8_t *rdata, int rdata_len)
 {
-    static uint8_t packetbuffer[BUFFER_MAX_LEN];
+    static uint8_t prebuffer[BUFFER_MAX_LEN];
 static uint8_t smap1[] = {
      JTAG_IRREG(IRREG_CFG_IN), EXIT1_TO_IDLE,
      IDLE_TO_SHIFT_DR,
@@ -438,15 +438,17 @@ static uint8_t smap1[] = {
      DATAW(4), SWAP32(SMAP_SYNC),
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
      DATAW(4),};
- //SWAP32(A),         
+
 static uint8_t smap2[] = {
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
      DATAW(4), SWAP32(SMAP_CMD_DESYNC),
      DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-     DATAW(3), 0x04, 0x00, 0x00,
-     DATAWBIT, 0x06, 0x00,
+     //DATAW(3), 0x04, 0x00, 0x00,
+     //DATAWBIT, 0x06, 0x00,
+     };
+static uint8_t smap3[] = {
      SHIFT_TO_EXIT1(0),
      EXIT1_TO_IDLE,
      JTAG_IRREG(IRREG_CFG_OUT), EXIT1_TO_IDLE,
@@ -455,18 +457,23 @@ static uint8_t smap2[] = {
      DATARWBIT, 0x06, 0x00,
      SHIFT_TO_EXIT1_RW(0),
      SEND_IMMEDIATE };
+uint8_t temp[sizeof(data)] = {SWAP32(data)};
 
-    uint8_t *ptr = packetbuffer;
+    uint8_t *ptr = prebuffer;
     memcpy(ptr, prefix, prefix_len);
     ptr += prefix_len;
     memcpy(ptr, smap1, sizeof(smap1));
     ptr += sizeof(smap1);
-uint8_t temp[sizeof(data)] = {SWAP32(data)};
     memcpy(ptr, temp, sizeof(temp));
     ptr += sizeof(temp);
     memcpy(ptr, smap2, sizeof(smap2));
     ptr += sizeof(smap2);
-    writetc = ftdi_write_data_submit(ftdi, packetbuffer, ptr - packetbuffer);
+    //memcpy(ptr, smap3, sizeof(smap3));
+    //ptr += sizeof(smap3);
+    //writetc = ftdi_write_data_submit(ftdi, prebuffer, ptr - prebuffer);
+static uint8_t request_data[] = {INT32(4)};
+    send_data_frame(ftdi, 0, prebuffer, ptr - prebuffer, smap3, sizeof(smap3),
+        request_data, sizeof(request_data), 9999);
     check_ftdi_read_data_submit(ftdi, rdata, rdata_len);
 }
 
