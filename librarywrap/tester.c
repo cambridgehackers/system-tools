@@ -67,6 +67,7 @@
 #define GPIO_DONE            0x10
 #define GPIO_01              0x01
 #define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
+#define SET_CLOCK_DIVISOR    0x86, INT16(1)   // 15MHz (since disable clk divide by 5)
 
 #define IRREG_USER2          0x003
 #define IRREG_CFG_OUT        0x004
@@ -169,9 +170,6 @@
     writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
     check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
 
-static struct ftdi_transfer_control* writetc;
-static uint8_t bitswap[256];
-
 static void memdump(uint8_t *p, int len, char *title)
 {
 int i;
@@ -251,7 +249,10 @@ struct ftdi_context *init_ftdi()
     return ftdi;
 }
 
+static struct ftdi_transfer_control* writetc;
+static uint8_t bitswap[256];
 static uint8_t last_read_data[10000];
+
 static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
 {
     struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, size);
@@ -488,7 +489,7 @@ int main(int argc, char **argv)
     static uint8_t initialize_sequence[] = {
          0x85, // Disconnect TDI/DO from loopback
          0x8a, // Disable clk divide by 5
-         0x86, INT16(1), // 15MHz
+         SET_CLOCK_DIVISOR,
          0x80, 0xe8, 0xeb,
          0x82, 0x20, 0x30,
          0x82, 0x30, 0x00,
@@ -501,7 +502,7 @@ int main(int argc, char **argv)
     static uint8_t item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
     writetc = ftdi_write_data_submit(ctxitem0z, item8z, sizeof(item8z));
     ftdi_transfer_data_done(writetc);
-    static uint8_t command_set_divisor[] = { 0x86, INT16(1) }; // 15MHz
+    static uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
     ftdi_write_data(ctxitem0z, command_set_divisor, sizeof(command_set_divisor));
 
     /*
@@ -531,7 +532,7 @@ int main(int argc, char **argv)
          IDLE_TO_SHIFT_DR,
          COMMAND_ENDING,
     };
-    static uint8_t readdata_five_ff[] = { INT32(0xffffffff), 0xff };
+    static uint8_t readdata_five_ff[] = { 0xff, INT32(0xffffffff) };
     WRITE_READ(ctxitem0z, item11z, readdata_five_ff);
     for (i = 0; i < 3; i++) {
         static uint8_t item12z[] = { EXTENDED_COMMAND_RW(IRREG_BYPASS), SEND_IMMEDIATE };
@@ -557,7 +558,7 @@ int main(int argc, char **argv)
          SET_LSB_DIRECTION(GPIO_01),
          JTAG_IRREG_RW(IRREG_ISC_NOOP), SEND_IMMEDIATE,
     };
-    static uint8_t readdata9z[] = { 0x88, 0x44 };
+    static uint8_t readdata9z[] = { INT16(0x4488) };
     WRITE_READ(ctxitem0z, item15z, readdata9z);
 
     /*
@@ -571,7 +572,7 @@ int main(int argc, char **argv)
     printf("Starting to send file '%s'\n", argv[1]);
     int inputfd = open(argv[1], O_RDONLY);
     static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
-         IDLE_TO_SHIFT_DR, DATAW(4), 0x00, 0x00, 0x00, 0x00 };
+         IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) };
     uint8_t *headerp = enter_shift_dr;
     int header_len = sizeof(enter_shift_dr);
     int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
@@ -628,11 +629,11 @@ int main(int argc, char **argv)
          TMSW, 0x01, 0x00,
          JTAG_IRREG_RW(IRREG_BYPASS), SEND_IMMEDIATE,
     };
-    static uint8_t readdata12z[] = { 0xac, 0xd6 };
+    static uint8_t readdata12z[] = { INT16(0xd6ac) };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
     static uint8_t item19z[] = { EXIT1_TO_IDLE };
-    static uint8_t readdata13z[] = { 0x02, 0x08, 0x9e, 0x7f, 0x3f };
+    static uint8_t readdata13z[] = { 0x02, SWAP32B(0xfcfe7910) };
     send_smap(ctxitem0z, item19z, sizeof(item19z),
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1),
          readdata13z, sizeof(readdata13z));
@@ -647,7 +648,7 @@ int main(int argc, char **argv)
          EXTENDED_COMMAND_RW(IRREG_BYPASS),
          SEND_IMMEDIATE,
     };
-    static uint8_t readdata14z[] = { 0xa9, 0xf5 };
+    static uint8_t readdata14z[] = { INT16(0xf5a9) };
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
     read_status(ctxitem0z, 1);
