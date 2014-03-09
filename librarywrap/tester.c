@@ -191,6 +191,20 @@ struct ftdi_context *init_ftdi(void)
 #define SHIFT_TO_UPDATE_TO_IDLE_RW(A) \
      TMSRW, 0x02, ((A) | 0x03)   /* Shift-DR -> Update-DR -> Idle */
 #define FORCE_RETURN_TO_RESET TMSW, 0x04, 0x1f /* go back to TMS reset state */
+#define RESET_TO_SHIFT_DR     TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
+#define RESET_TO_RESET        TMSW, 0x00, 0x01
+#define TMSW_DELAY                                             \
+         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */ \
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, \
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, \
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, \
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, \
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,                   \
+         TMSW, 0x01, 0x00
+#define PAUSE_TO_SHIFT       TMSW, 0x01, 0x01 /* Pause-DR -> Shift-DR */
+#define PAUSE_TO_SHIFT_RW    TMSRW, 0x01, 0x01
+#define SHIFT_TO_PAUSE       TMSW, 0x01, 0x01 /* Shift-DR -> Pause-DR */
+#define TMS_RESET_WEIRD      TMSW, 0x04, 0x7f /* Reset????? */
 
 #define JTAG_IRREG(A)                             \
      IDLE_TO_SHIFT_IR,                            \
@@ -371,9 +385,9 @@ static void test_pattern(struct ftdi_context *ftdi)
     }
 }
 
-#define IDTEST_PATTERN1                         \
-     TMSW, 0x04, 0x7f, /* Reset????? */         \
-     TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
+#define IDTEST_PATTERN1                 \
+     TMS_RESET_WEIRD, /* Reset????? */  \
+     RESET_TO_SHIFT_DR
 
 static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
 static uint8_t pat3[] = DITEM( SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE);
@@ -392,7 +406,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
     int j = 3, k = 2;
 
-    send_data_frame(ftdi, DREAD, DITEM( TMSW, 0x00, 0x01, IDTEST_PATTERN1),
+    send_data_frame(ftdi, DREAD, DITEM( RESET_TO_RESET, IDTEST_PATTERN1),
         pat3, patdata, sizeof(patdata), 9999);
     check_ftdi_read_data_submit(ftdi, readdata3z);
     if(instance) {
@@ -423,7 +437,7 @@ static uint8_t request_data[] = {
     if (!instance)
         data = DITEM( READ_STAT_REG1() );
     else
-        data = DITEM(READ_STAT_REG1(IN_RESET_STATE, TMSW, 0x00, 0x01, ));  /* ... -> Reset */
+        data = DITEM(READ_STAT_REG1(IN_RESET_STATE, RESET_TO_RESET, ));
     send_data_frame(ftdi, 0, data,
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0),
             EXTENDED_COMMAND(IRREG_CFG_OUT),
@@ -528,13 +542,13 @@ int main(int argc, char **argv)
      */
     static uint8_t iddata[] = {INT32(0xffffffff),  PATTERN2};
     send_data_frame(ftdi, DREAD,
-        DITEM(TMSW, 0x00, 0x01,  /* ... -> Reset */
+        DITEM(RESET_TO_RESET,
              IN_RESET_STATE,
-             TMSW, 0x00, 0x01,  /* ... -> Reset */
+             RESET_TO_RESET,
              IN_RESET_STATE,
              RESET_TO_IDLE,
              IDLE_TO_SHIFT_DR),
-        DITEM(TMSRW, 0x01, 0x01, /* Shift-DR -> Pause-DR */
+        DITEM(PAUSE_TO_SHIFT_RW,
              SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999);
     check_ftdi_read_data_submit(ftdi, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
@@ -577,21 +591,19 @@ int main(int argc, char **argv)
     uint8_t *headerp =
          DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
     int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
-    static uint8_t TMS_STATE_1_0[] = DITEM(TMSW, 0x01, 0x01);
-    uint8_t *tailp = TMS_STATE_1_0;      /* Shift-DR -> Pause-DR */
+    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
     int last = 0;
     while (!last) {
         static uint8_t filebuffer[FILE_READSIZE];
         int size = read(inputfd, filebuffer, FILE_READSIZE);
         last = (size < FILE_READSIZE);
         if (last)
-            tailp = DITEM(TMSW, 0x00, 0x01,/* Shift-DR -> Exit1-DR */
-                          EXIT1_TO_IDLE);
+            tailp = DITEM(SHIFT_TO_EXIT1(0), EXIT1_TO_IDLE);
         for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
         send_data_frame(ftdi, 0, headerp, tailp, filebuffer, size, limit_len);
         limit_len = MAX_SINGLE_USB_DATA;
-        headerp = TMS_STATE_1_0;         /* Pause-DR -> Shift-DR */
+        headerp = DITEM(PAUSE_TO_SHIFT);
     }
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
@@ -606,13 +618,7 @@ int main(int argc, char **argv)
          EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_BYPASS),
          JTAG_IRREG(IRREG_JSTART),
-         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x01, 0x00,
+         TMSW_DELAY,
          JTAG_IRREG_RW(IRREG_BYPASS)), DITEM( INT16(0xd6ac) ));
 
     send_smap(ftdi, DITEM( EXIT1_TO_IDLE ),
