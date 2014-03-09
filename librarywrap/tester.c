@@ -300,15 +300,15 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf,
     }
 }
 
-static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *header, int header_len,
+static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *header,
     uint8_t *tail, int tail_len, uint8_t *ptrin, int size, int limit_len)
 {
     int i;
     static uint8_t packetbuffer[BUFFER_MAX_LEN];
     uint8_t *readptr = packetbuffer;
 
-    memcpy(readptr, header, header_len);
-    readptr += header_len;
+    memcpy(readptr, header+1, header[0]);
+    readptr += header[0];
     while (size > 0) {
         int rlen = size-1;
         if (rlen > limit_len)
@@ -384,9 +384,9 @@ static uint8_t pat3[] = { SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE};
 static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
 static void test_idcode(struct ftdi_context *ftdi)
 {
-    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN1};
+    static uint8_t item4z[] = DITEM( IDLE_TO_RESET, IDTEST_PATTERN1);
     int j;
-    send_data_frame(ftdi, MPSSE_DO_READ|MREAD, item4z, sizeof(item4z), pat3, sizeof(pat3),
+    send_data_frame(ftdi, DREAD, item4z, pat3, sizeof(pat3),
         patdata, sizeof(patdata), 9999);
     check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z));
     for (j = 0; j < 3; j++)
@@ -395,10 +395,10 @@ static void test_idcode(struct ftdi_context *ftdi)
 
 static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
-    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN1};
+    static uint8_t item3z[] = DITEM( TMSW, 0x00, 0x01, IDTEST_PATTERN1);
     int j = 3, k = 2;
 
-    send_data_frame(ftdi, MPSSE_DO_READ|MREAD, item3z, sizeof(item3z), pat3, sizeof(pat3),
+    send_data_frame(ftdi, DREAD, item3z, pat3, sizeof(pat3),
         patdata, sizeof(patdata), 9999);
     check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z));
     if(instance) {
@@ -413,7 +413,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
 static void read_status(struct ftdi_context *ftdi, int instance)
 {
 uint8_t *data;
-int i, size;
+int i;
 
 #define READ_STAT_REG1(...)          \
      IDLE_TO_RESET,                  \
@@ -431,18 +431,11 @@ static uint8_t finish_req[] = {
      IDLE_TO_SHIFT_DR,                     
      COMMAND_ENDING};
 
-    if (!instance) {
-        static uint8_t item13z[] = { READ_STAT_REG1() };
-        data = item13z;
-        size = sizeof(item13z);
-    }
-    else {
-        static uint8_t item22z[] = {
-             READ_STAT_REG1(IN_RESET_STATE, TMSW, 0x00, 0x01, )};  /* ... -> Reset */
-        data = item22z;
-        size = sizeof(item22z);
-    }
-    send_data_frame(ftdi, 0, data, size, finish_req, sizeof(finish_req),
+    if (!instance)
+        data = DITEM( READ_STAT_REG1() );
+    else
+        data = DITEM(READ_STAT_REG1(IN_RESET_STATE, TMSW, 0x00, 0x01, ));  /* ... -> Reset */
+    send_data_frame(ftdi, 0, data, finish_req, sizeof(finish_req),
         request_data, sizeof(request_data), 9999);
     static uint8_t returned_status[] = { 2, SWAP32B(0xf0fe7910) };
     check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
@@ -489,7 +482,7 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, int prefix_len
          SHIFT_TO_EXIT1_RW(0),
          SEND_IMMEDIATE };
 
-    uint8_t *ptr = prebuffer;
+    uint8_t *ptr = prebuffer+1;
     memcpy(ptr, prefix, prefix_len);
     ptr += prefix_len;
     memcpy(ptr, smap1, sizeof(smap1));
@@ -498,7 +491,8 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, int prefix_len
     ptr += sizeof(temp);
     memcpy(ptr, smap2, sizeof(smap2));
     ptr += sizeof(smap2);
-    send_data_frame(ftdi, 0, prebuffer, ptr - prebuffer, smap3, sizeof(smap3),
+    prebuffer[0] = ptr - (prebuffer + 1);
+    send_data_frame(ftdi, 0, prebuffer, smap3, sizeof(smap3),
         request_data, sizeof(request_data), 9999);
     check_ftdi_read_data_submit(ftdi, rdata, rdata_len);
 }
@@ -540,19 +534,19 @@ int main(int argc, char **argv)
     /*
      * Step 5: Check Device ID
      */
-    static uint8_t idstart[] = {
-         TMSW, 0x00, 0x01,  /* ... -> Reset */
-         IN_RESET_STATE,
-         TMSW, 0x00, 0x01,  /* ... -> Reset */
-         IN_RESET_STATE,
-         RESET_TO_IDLE,
-         IDLE_TO_SHIFT_DR};
+    static uint8_t idstart[] = DITEM(\
+         TMSW, 0x00, 0x01,  /* ... -> Reset */ \
+         IN_RESET_STATE,                       \
+         TMSW, 0x00, 0x01,  /* ... -> Reset */ \
+         IN_RESET_STATE,                       \
+         RESET_TO_IDLE,                       \
+         IDLE_TO_SHIFT_DR);
     static uint8_t iddata[] = { PATTERN2, INT32(0xffffffff) };
     static uint8_t idfinal[] = {
          TMSRW, 0x01, 0x01, /* Shift-DR -> Pause-DR */
          SEND_IMMEDIATE};
     static uint8_t readdata5z[] = { IDCODE_VALUE, PATTERN2, 0xff };
-    send_data_frame(ctxitem0z, MPSSE_DO_READ|MREAD, idstart, sizeof(idstart), idfinal, sizeof(idfinal),
+    send_data_frame(ctxitem0z, DREAD, idstart, idfinal, sizeof(idfinal),
         iddata, sizeof(iddata), 9999);
     check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z));
 
@@ -606,17 +600,16 @@ int main(int argc, char **argv)
 
     printf("Starting to send file '%s'\n", argv[1]);
     int inputfd = open(argv[1], O_RDONLY);
-    static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
-         IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) };
+    static uint8_t enter_shift_dr[] = DITEM( EXIT1_TO_IDLE, \
+         IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
     uint8_t *headerp = enter_shift_dr;
-    int header_len = sizeof(enter_shift_dr);
-    int limit_len = MAX_SINGLE_USB_DATA - sizeof(enter_shift_dr);
-    static uint8_t TMS_STATE_1_0[] = {TMSW, 0x01, 0x01};
+    int limit_len = MAX_SINGLE_USB_DATA - enter_shift_dr[0];
+    static uint8_t TMS_STATE_1_0[] = DITEM(TMSW, 0x01, 0x01);
     static uint8_t LAST_TMS[] = {
             TMSW, 0x00, 0x01,            /* Shift-DR -> Exit1-DR */
             EXIT1_TO_IDLE};
-    uint8_t *tailp = TMS_STATE_1_0;      /* Shift-DR -> Pause-DR */
-    int tail_len = sizeof(TMS_STATE_1_0);
+    uint8_t *tailp = TMS_STATE_1_0+1;      /* Shift-DR -> Pause-DR */
+    int tail_len = TMS_STATE_1_0[0];
     int last = 0;
     while (!last) {
         static uint8_t filebuffer[FILE_READSIZE];
@@ -628,11 +621,10 @@ int main(int argc, char **argv)
         }
         for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
-        send_data_frame(ctxitem0z, 0, headerp, header_len, tailp, tail_len,
+        send_data_frame(ctxitem0z, 0, headerp, tailp, tail_len,
             filebuffer, size, limit_len);
         limit_len = MAX_SINGLE_USB_DATA;
         headerp = TMS_STATE_1_0;         /* Pause-DR -> Shift-DR */
-        header_len = sizeof(TMS_STATE_1_0);
     }
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
