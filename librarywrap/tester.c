@@ -600,7 +600,7 @@ int main(int argc, char **argv)
      */
     send_smap(ftdi, pulse_gpio(15000000/800),  // 1.25 msec
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1),
-         DITEM( INT32(0), 0x80 ));
+         DITEM( 0, SWAP32B(0x1000000) ));
 
     WRITE_READ(ftdi, DITEM(
          EXIT1_TO_IDLE,
