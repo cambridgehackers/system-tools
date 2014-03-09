@@ -251,6 +251,37 @@ struct ftdi_context *init_ftdi()
     return ftdi;
 }
 
+static uint8_t *pulse_gpio(int delay, int *size)
+{
+    static uint8_t prebuffer[BUFFER_MAX_LEN];
+    static uint8_t pulsepre[] = {
+         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
+         SET_LSB_DIRECTION(GPIO_DONE),
+    };
+    static uint8_t pulse65k[] = {
+         PULSE_CLOCK, INT16(65536 - 1)
+    };
+    static uint8_t pulsepost[] = {
+         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
+         SET_LSB_DIRECTION(GPIO_01)
+    };
+    uint8_t *ptr = prebuffer;
+    memcpy(ptr, pulsepre, sizeof(pulsepre));
+    ptr += sizeof(pulsepre);
+    while(delay > 65536) {
+        memcpy(ptr, pulse65k, sizeof(pulse65k));
+        ptr += sizeof(pulse65k);
+        delay -= 65536;
+    }
+    *ptr++ = PULSE_CLOCK;
+    *ptr++ = M(delay-1);
+    *ptr++ = M((delay-1)>>8);
+    memcpy(ptr, pulsepost, sizeof(pulsepost));
+    ptr += sizeof(pulsepost);
+    *size = ptr - prebuffer;
+    return prebuffer;
+}
+
 static struct ftdi_transfer_control* writetc;
 static uint8_t bitswap[256];
 static uint8_t last_read_data[10000];
@@ -547,21 +578,25 @@ int main(int argc, char **argv)
     /*
      * Step 2: Initialization
      */
-    static uint8_t item15z[] = {
+    int pdata_size;
+    static uint8_t item15z[1000];
+    uint8_t *item15ptr = item15z;
+    static uint8_t program_data[] = {
          IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
          JTAG_IRREG(IRREG_JPROGRAM),
-         JTAG_IRREG(IRREG_ISC_NOOP),
-         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
-         SET_LSB_DIRECTION(GPIO_DONE),
-         PULSE_CLOCK, INT16(65536 - 1),
-         PULSE_CLOCK, INT16(65536 - 1),
-         PULSE_CLOCK, INT16(15000000/80 - 65536 - 65536 - 1), // 12.5 msec
-         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
-         SET_LSB_DIRECTION(GPIO_01),
-         JTAG_IRREG_RW(IRREG_ISC_NOOP)
+         JTAG_IRREG(IRREG_ISC_NOOP)
     };
+    static uint8_t isc_noop[] = { JTAG_IRREG_RW(IRREG_ISC_NOOP) };
+    memcpy(item15ptr, program_data, sizeof(program_data));
+    item15ptr += sizeof(program_data);
+    uint8_t *pdata = pulse_gpio(15000000/80, &pdata_size);  // 12.5 msec
+    memcpy(item15ptr, pdata, pdata_size);
+    item15ptr += pdata_size;
+    memcpy(item15ptr, isc_noop, sizeof(isc_noop));
+    item15ptr += sizeof(isc_noop);
     static uint8_t readdata9z[] = { INT16(0x4488) };
-    WRITE_READ(ctxitem0z, item15z, readdata9z);
+    writetc = ftdi_write_data_submit(ctxitem0z, item15z, item15ptr - item15z);
+    check_ftdi_read_data_submit(ctxitem0z, readdata9z, sizeof(readdata9z));
 
     /*
      * Step 6: Load Configuration Data Frames
@@ -605,15 +640,9 @@ int main(int argc, char **argv)
     /*
      * Step 8: Startup
      */
-    static uint8_t done_sending_data[] = {
-         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
-         SET_LSB_DIRECTION(GPIO_DONE),
-         PULSE_CLOCK, INT16(15000000/800 - 1),  // 1.25 msec
-         SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
-         SET_LSB_DIRECTION(GPIO_01)
-    };
+    pdata = pulse_gpio(15000000/800, &pdata_size);  // 1.25 msec
     static uint8_t readdata11z[] = { INT32(0), 0x80 };
-    send_smap(ctxitem0z, done_sending_data, sizeof(done_sending_data),
+    send_smap(ctxitem0z, pdata, pdata_size,
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1),
          readdata11z, sizeof(readdata11z));
 
