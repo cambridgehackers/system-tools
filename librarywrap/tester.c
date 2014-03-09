@@ -167,7 +167,7 @@
 #define DITEM(...) ((uint8_t[]){sizeof((uint8_t[]){ __VA_ARGS__ }), __VA_ARGS__})
 
 #define WRITE_READ(FTDI, A, B) \
-    writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
+    writetc = ftdi_write_data_submit(FTDI, (A)+1, (A)[0]); \
     check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
 
 static void memdump(uint8_t *p, int len, char *title)
@@ -352,18 +352,16 @@ static void test_pattern(struct ftdi_context *ftdi)
      __VA_ARGS__                     \
      COMMAND_ENDING
 
-    static uint8_t item5z[] = { DATA_ITEM( ) };
-    static uint8_t item6z[] = {
+    static uint8_t item5z[] = DITEM( DATA_ITEM( ) );
+    static uint8_t item6z[] = DITEM( \
          DATA_ITEM( DATAW(1), 0x69,       /* in Shift-DR */    \
-                    DATAWBIT, 0x01, 0x00, ) /* in Shift-DR */
-    };
-    static uint8_t item7z[] = {
-         DATA_ITEM( DATAWBIT, 0x04, 0x0c, /* in Shift-DR */    \
+                    DATAWBIT, 0x01, 0x00, )); /* in Shift-DR */ \
+    static uint8_t item7z[] =
+         DITEM(DATA_ITEM( DATAWBIT, 0x04, 0x0c, /* in Shift-DR */    \
                     SHIFT_TO_UPDATE_TO_IDLE(0),                \
                     IDLE_TO_SHIFT_DR,                          \
                     DATAW(1), 0x69,       /* in Shift-DR */    \
-                    DATAWBIT, 0x01, 0x00, ) /* in Shift-DR */
-    };
+                    DATAWBIT, 0x01, 0x00, )); /* in Shift-DR */
     static uint8_t readdata_five_zeros[] = { INT32(0), 0x00 };
     int i;
 
@@ -542,18 +540,17 @@ int main(int argc, char **argv)
         iddata, sizeof(iddata), 9999);
     check_ftdi_read_data_submit(ctxitem0z, readdata5z, sizeof(readdata5z));
 
-    static uint8_t item11z[] = {
-         FORCE_RETURN_TO_RESET,
-         IN_RESET_STATE,
-         RESET_TO_IDLE,
-         EXTENDED_COMMAND(IRREG_USERCODE),
-         IDLE_TO_SHIFT_DR,
-         COMMAND_ENDING,
-    };
+    static uint8_t item11z[] = DITEM( \
+         FORCE_RETURN_TO_RESET, \
+         IN_RESET_STATE, \
+         RESET_TO_IDLE, \
+         EXTENDED_COMMAND(IRREG_USERCODE), \
+         IDLE_TO_SHIFT_DR, \
+         COMMAND_ENDING);
     static uint8_t readdata_five_ff[] = { 0xff, INT32(0xffffffff) };
     WRITE_READ(ctxitem0z, item11z, readdata_five_ff);
     for (i = 0; i < 3; i++) {
-        static uint8_t item12z[] = { EXTENDED_COMMAND_RW(IRREG_BYPASS), SEND_IMMEDIATE };
+        static uint8_t item12z[] = DITEM( EXTENDED_COMMAND_RW(IRREG_BYPASS), SEND_IMMEDIATE );
         static uint8_t readdata7z[] = { INT16(0xf5af) };
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
@@ -585,7 +582,7 @@ int main(int argc, char **argv)
     /*
      * Step 6: Load Configuration Data Frames
      */
-    static uint8_t item16z[] = { EXIT1_TO_IDLE, JTAG_IRREG_RW(IRREG_CFG_IN) };
+    static uint8_t item16z[] = DITEM( EXIT1_TO_IDLE, JTAG_IRREG_RW(IRREG_CFG_IN) );
     static uint8_t readdata10z[] = { INT16(0x458a) };
     WRITE_READ(ctxitem0z, item16z, readdata10z);
 
@@ -621,19 +618,18 @@ int main(int argc, char **argv)
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1),
          readdata11z, sizeof(readdata11z));
 
-    static uint8_t item18z[] = {
-         EXIT1_TO_IDLE,
-         JTAG_IRREG(IRREG_BYPASS),
-         JTAG_IRREG(IRREG_JSTART),
-         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
-         TMSW, 0x01, 0x00,
-         JTAG_IRREG_RW(IRREG_BYPASS)
-    };
+    static uint8_t item18z[] = DITEM( \
+         EXIT1_TO_IDLE,\
+         JTAG_IRREG(IRREG_BYPASS),\
+         JTAG_IRREG(IRREG_JSTART),\
+         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */\
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
+         TMSW, 0x01, 0x00,\
+         JTAG_IRREG_RW(IRREG_BYPASS));
     static uint8_t readdata12z[] = { INT16(0xd6ac) };
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
@@ -646,11 +642,10 @@ int main(int argc, char **argv)
     writetc = ftdi_write_data_submit(ctxitem0z, item20z, sizeof(item20z));
     ftdi_transfer_data_done(writetc);
 
-    static uint8_t item21z[] = {
-         IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-         EXTENDED_COMMAND_RW(IRREG_BYPASS),
-         SEND_IMMEDIATE,
-    };
+    static uint8_t item21z[] = DITEM( \
+         IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE, \
+         EXTENDED_COMMAND_RW(IRREG_BYPASS), \
+         SEND_IMMEDIATE);
     static uint8_t readdata14z[] = { INT16(0xf5a9) };
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
