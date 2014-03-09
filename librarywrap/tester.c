@@ -174,7 +174,6 @@ struct ftdi_context *init_ftdi(void)
 #define DATAW(A)          DWRITE, INT16((A)-1) //19
 #define DATAR(A)           DREAD, INT16((A)-1) //2c
 #define DATARW(A) (DREAD|DWRITE), INT16((A)-1) //3d
-#define PULSE_CLOCK        0x8f
 
 #define IDLE_TO_SHIFT_IR   TMSW, 0x03, 0x03  /* Idle -> Shift-IR */
 #define IDLE_TO_SHIFT_DR   TMSW, 0x02, 0x01  /* Idle -> Shift-DR */
@@ -269,13 +268,13 @@ static uint8_t *pulse_gpio(int delay)
 {
 #define GPIO_DONE            0x10
 #define GPIO_01              0x01
-#define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
+#define SET_LSB_DIRECTION(A) SET_BITS_LOW, 0xe0, (0xea | (A))
 
     static uint8_t prebuffer[BUFFER_MAX_LEN];
     static uint8_t pulsepre[] =
       DITEM(SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
             SET_LSB_DIRECTION(GPIO_DONE));
-    static uint8_t pulse65k[] = DITEM(PULSE_CLOCK, INT16(65536 - 1));
+    static uint8_t pulse65k[] = DITEM(CLK_BYTES, INT16(65536 - 1));
     static uint8_t pulsepost[] =
       DITEM(SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
             SET_LSB_DIRECTION(GPIO_01));
@@ -287,7 +286,7 @@ static uint8_t *pulse_gpio(int delay)
         ptr += pulse65k[0];
         delay -= 65536;
     }
-    *ptr++ = PULSE_CLOCK;
+    *ptr++ = CLK_BYTES;
     *ptr++ = M(delay-1);
     *ptr++ = M((delay-1)>>8);
     memcpy(ptr, pulsepost+1, pulsepost[0]);
@@ -517,13 +516,13 @@ int main(int argc, char **argv)
      */
     ftdi = init_ftdi();   /* generic initialization */
     static uint8_t initialize_sequence[] = {
-         0x85, // Disconnect TDI/DO from loopback
-         0x8a, // Disable clk divide by 5
+         LOOPBACK_END, // Disconnect TDI/DO from loopback
+         DIS_DIV_5, // Disable clk divide by 5
          SET_CLOCK_DIVISOR,
-         0x80, 0xe8, 0xeb,
-         0x82, 0x20, 0x30,
-         0x82, 0x30, 0x00,
-         0x82, 0x00, 0x00,
+         SET_BITS_LOW, 0xe8, 0xeb,
+         SET_BITS_HIGH, 0x20, 0x30,
+         SET_BITS_HIGH, 0x30, 0x00,
+         SET_BITS_HIGH, 0x00, 0x00,
          FORCE_RETURN_TO_RESET
     };
     ftdi_write_data(ftdi, initialize_sequence, sizeof(initialize_sequence));
@@ -548,8 +547,7 @@ int main(int argc, char **argv)
              IN_RESET_STATE,
              RESET_TO_IDLE,
              IDLE_TO_SHIFT_DR),
-        DITEM(PAUSE_TO_SHIFT_RW,
-             SEND_IMMEDIATE),
+        DITEM(PAUSE_TO_SHIFT_RW, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999);
     check_ftdi_read_data_submit(ftdi, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
 
