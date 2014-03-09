@@ -196,10 +196,8 @@
     writetc = ftdi_write_data_submit(FTDI, A, sizeof(A)); \
     check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
 
-static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
-
 static struct ftdi_transfer_control* writetc;
-static int inputfd;
+static uint8_t bitswap[256];
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -217,126 +215,6 @@ int i;
         len--;
     }
     printf("\n");
-}
-
-static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
-{
-uint8_t temp[10000];
-    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, temp, size);
-    ftdi_transfer_data_done(writetc);
-    writetc = NULL;
-    ftdi_transfer_data_done(tc);
-    if (memcmp(buf, temp, size)) {
-        printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-        memdump(buf, size, "EXPECT");
-        memdump(temp, size, "ACTUAL");
-    }
-}
-
-static void test_pattern(struct ftdi_context *ftdi)
-{
-#define DATA_ITEM \
-     EXTENDED_COMMAND(IRREG_BYPASS), \
-     EXTENDED_COMMAND(IRREG_USER2)
-
-    static uint8_t item5z[] = { DATA_ITEM, IDLE_TO_SHIFT_DR, COMMAND_ENDING };
-    static uint8_t item6z[] = {
-         DATA_ITEM,
-         IDLE_TO_SHIFT_DR,
-         DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
-         DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
-         COMMAND_ENDING,
-    };
-    static uint8_t item7z[] = {
-         DATA_ITEM,
-         IDLE_TO_SHIFT_DR,
-         DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
-         SHIFT_TO_UPDATE_TO_IDLE(0),
-         IDLE_TO_SHIFT_DR,
-         DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
-         DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
-         COMMAND_ENDING,
-    };
-    static uint8_t readdata_five_zeros[] = { INT32(0), 0x00 };
-    int i;
-
-    WRITE_READ(ftdi, item5z, readdata_five_zeros);
-    WRITE_READ(ftdi, item6z, readdata_five_zeros);
-    for (i = 0; i < 2; i++) {
-        WRITE_READ(ftdi, item7z, readdata_five_zeros);
-    }
-}
-
-#define IDTEST_PATTERN                          \
-     TMSW, 0x04, 0x7f, /* Reset????? */         \
-     TMSW, 0x03, 0x02, /* Reset -> Shift-DR */  \
-     DATARW(63), PATTERN1, 0xff, 0x00, 0x00,    \
-     DATARWBIT, 0x06, 0x00,                     \
-     SHIFT_TO_UPDATE_TO_IDLE_RW(0),             \
-     SEND_IMMEDIATE
-
-static void test_idcode(struct ftdi_context *ftdi)
-{
-    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN };
-    int j;
-    WRITE_READ(ftdi, item4z, readdata3z);     // IDCODE 00ff
-    for (j = 0; j < 3; j++)
-        test_pattern(ftdi);
-}
-
-static void check_idcode(struct ftdi_context *ftdi, int instance)
-{
-    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
-    int j = 3, k = 2;
-
-    WRITE_READ(ftdi, item3z, readdata3z);     // IDCODE 00ff
-    if(instance) {
-        while (j-- > 0)
-            test_pattern(ftdi);
-        k = 3;
-    }
-    while (k-- > 0)
-        test_idcode(ftdi);
-}
-
-static void read_status(struct ftdi_context *ftdi, int instance)
-{
-static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
-uint8_t *data;
-int size;
-
-#define READ_STAT_REG                         \
-     EXTENDED_COMMAND(IRREG_CFG_IN),          \
-     IDLE_TO_SHIFT_DR,                        \
-     DATAW_BYTES_LEN(19),                     \
-          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
-          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,                    \
-     SHIFT_TO_UPDATE_TO_IDLE(0),              \
-     EXTENDED_COMMAND(IRREG_CFG_OUT),         \
-     IDLE_TO_SHIFT_DR,                        \
-     COMMAND_ENDING
-
-    if (!instance) {
-        static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, READ_STAT_REG };
-        data = item13z;
-        size = sizeof(item13z);
-    }
-    else {
-        static uint8_t item22z[] = {
-             IDLE_TO_RESET,
-             IN_RESET_STATE,
-             TMSW, 0x00, 0x01,  /* ... -> Reset */
-             RESET_TO_IDLE,
-             READ_STAT_REG };
-        data = item22z;
-        size = sizeof(item22z);
-    }
-    writetc = ftdi_write_data_submit(ftdi, data, size);
-    check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
-
-static uint8_t itor[] = { IDLE_TO_RESET };
-    ftdi_transfer_data_done(ftdi_write_data_submit(ftdi, itor, sizeof(itor)));
 }
 
 struct ftdi_context *init_ftdi()
@@ -400,6 +278,135 @@ struct ftdi_context *init_ftdi()
     return ftdi;
 }
 
+static uint8_t last_read_data[10000];
+static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
+{
+    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, size);
+    ftdi_transfer_data_done(writetc);
+    writetc = NULL;
+    ftdi_transfer_data_done(tc);
+    if (memcmp(buf, last_read_data, size)) {
+        printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+        memdump(buf, size, "EXPECT");
+        memdump(last_read_data, size, "ACTUAL");
+    }
+}
+
+static void test_pattern(struct ftdi_context *ftdi)
+{
+#define DATA_ITEM \
+     EXTENDED_COMMAND(IRREG_BYPASS), \
+     EXTENDED_COMMAND(IRREG_USER2)
+
+    static uint8_t item5z[] = { DATA_ITEM, IDLE_TO_SHIFT_DR, COMMAND_ENDING };
+    static uint8_t item6z[] = {
+         DATA_ITEM,
+         IDLE_TO_SHIFT_DR,
+         DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
+         DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
+         COMMAND_ENDING,
+    };
+    static uint8_t item7z[] = {
+         DATA_ITEM,
+         IDLE_TO_SHIFT_DR,
+         DATAWBIT, 0x04, 0x0c, /* in Shift-DR */
+         SHIFT_TO_UPDATE_TO_IDLE(0),
+         IDLE_TO_SHIFT_DR,
+         DATAW_BYTES_LEN(1), 0x69, /* in Shift-DR */
+         DATAWBIT, 0x01, 0x00,     /* in Shift-DR */
+         COMMAND_ENDING,
+    };
+    static uint8_t readdata_five_zeros[] = { INT32(0), 0x00 };
+    int i;
+
+    WRITE_READ(ftdi, item5z, readdata_five_zeros);
+    WRITE_READ(ftdi, item6z, readdata_five_zeros);
+    for (i = 0; i < 2; i++) {
+        WRITE_READ(ftdi, item7z, readdata_five_zeros);
+    }
+}
+
+#define IDTEST_PATTERN                          \
+     TMSW, 0x04, 0x7f, /* Reset????? */         \
+     TMSW, 0x03, 0x02, /* Reset -> Shift-DR */  \
+     DATARW(63), PATTERN1, 0xff, 0x00, 0x00,    \
+     DATARWBIT, 0x06, 0x00,                     \
+     SHIFT_TO_UPDATE_TO_IDLE_RW(0),             \
+     SEND_IMMEDIATE
+
+static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
+static void test_idcode(struct ftdi_context *ftdi)
+{
+    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN };
+    int j;
+    WRITE_READ(ftdi, item4z, readdata3z);     // IDCODE 00ff
+    for (j = 0; j < 3; j++)
+        test_pattern(ftdi);
+}
+
+static void check_idcode(struct ftdi_context *ftdi, int instance)
+{
+    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN };
+    int j = 3, k = 2;
+
+    WRITE_READ(ftdi, item3z, readdata3z);     // IDCODE 00ff
+    if(instance) {
+        while (j-- > 0)
+            test_pattern(ftdi);
+        k = 3;
+    }
+    while (k-- > 0)
+        test_idcode(ftdi);
+}
+
+static void read_status(struct ftdi_context *ftdi, int instance)
+{
+uint8_t *data;
+int i, size;
+
+#define READ_STAT_REG                         \
+     EXTENDED_COMMAND(IRREG_CFG_IN),          \
+     IDLE_TO_SHIFT_DR,                        \
+     DATAW_BYTES_LEN(19),                     \
+          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
+          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
+     DATAWBIT, 0x06, 0x00,                    \
+     SHIFT_TO_UPDATE_TO_IDLE(0),              \
+     EXTENDED_COMMAND(IRREG_CFG_OUT),         \
+     IDLE_TO_SHIFT_DR,                        \
+     COMMAND_ENDING
+
+    if (!instance) {
+        static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, READ_STAT_REG };
+        data = item13z;
+        size = sizeof(item13z);
+    }
+    else {
+        static uint8_t item22z[] = {
+             IDLE_TO_RESET,
+             IN_RESET_STATE,
+             TMSW, 0x00, 0x01,  /* ... -> Reset */
+             RESET_TO_IDLE,
+             READ_STAT_REG };
+        data = item22z;
+        size = sizeof(item22z);
+    }
+    writetc = ftdi_write_data_submit(ftdi, data, size);
+    static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
+    check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
+    union {
+        uint32_t i;
+        uint8_t  c[4];
+    } status;
+    //memdump(last_read_data, sizeof(returned_status), "STATUS");
+    for (i = 0; i < 4; i++)
+        status.c[i] = bitswap[last_read_data[i+1]];
+    printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
+        status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
+    static uint8_t itor[] = { IDLE_TO_RESET };
+    ftdi_transfer_data_done(ftdi_write_data_submit(ftdi, itor, sizeof(itor)));
+}
+
 static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int header_len,
     uint8_t *tail, int tail_len, uint8_t *ptrin, int size, int limit_len)
 {
@@ -440,7 +447,6 @@ static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int head
 
 int main(int argc, char **argv)
 {
-    uint8_t bitswap[256];
     struct ftdi_context *ctxitem0z;
     int i;
 
@@ -538,7 +544,7 @@ int main(int argc, char **argv)
     WRITE_READ(ctxitem0z, item16z, readdata10z);
 
     printf("Starting to send file '%s'\n", argv[1]);
-    inputfd = open(argv[1], O_RDONLY);
+    int inputfd = open(argv[1], O_RDONLY);
     static uint8_t enter_shift_dr[] = { EXIT1_TO_IDLE,
          IDLE_TO_SHIFT_DR, DATAW_BYTES_LEN(4), 0x00, 0x00, 0x00, 0x00 };
     uint8_t *headerp = enter_shift_dr;
