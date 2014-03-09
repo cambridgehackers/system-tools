@@ -101,14 +101,14 @@
 
 #define TMSW    (MPSSE_WRITE_TMS               |MWRITE|MPSSE_BITMODE)//4b
 #define TMSRW   (MPSSE_WRITE_TMS|MPSSE_DO_READ |MREAD|MWRITE|MPSSE_BITMODE)//6f
-#define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), INT16((A)-1)//3d
 
-#define DATAR(A)  (MPSSE_DO_READ               |MREAD), INT16((A)-1) //2c
 #define DATAWBIT  (MPSSE_DO_WRITE              |MWRITE|MPSSE_BITMODE)//1b
 #define DATARBIT  (MPSSE_DO_READ               |MREAD|MPSSE_BITMODE) //2e
 #define DATARWBIT (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE|MPSSE_BITMODE)//3f
-#define DATAW_BYTES        0x19
+#define DATAW_BYTES (MPSSE_DO_WRITE | MWRITE)
 #define DATAW_BYTES_LEN(A) DATAW_BYTES, INT16((A)-1)
+#define DATAR(A)  (MPSSE_DO_READ               |MREAD), INT16((A)-1) //2c
+#define DATARW(A) (MPSSE_DO_READ|MPSSE_DO_WRITE|MREAD|MWRITE), INT16((A)-1)//3d
 #define PULSE_CLOCK        0x8f
 #define SEND_IMMEDIATE     0x87
 
@@ -282,7 +282,8 @@ static uint8_t last_read_data[10000];
 static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
 {
     struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, size);
-    ftdi_transfer_data_done(writetc);
+    if (writetc)
+        ftdi_transfer_data_done(writetc);
     writetc = NULL;
     ftdi_transfer_data_done(tc);
     if (memcmp(buf, last_read_data, size)) {
@@ -292,7 +293,7 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf,
     }
 }
 
-static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int header_len,
+static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *header, int header_len,
     uint8_t *tail, int tail_len, uint8_t *ptrin, int size, int limit_len)
 {
     int i;
@@ -307,14 +308,14 @@ static void send_data_frame(struct ftdi_context *ftdi, uint8_t *header, int head
             rlen = limit_len;
         if (rlen < limit_len)
             rlen--;                   // last byte is actually loaded with DATAW command
-        *readptr++ = DATAW_BYTES;
+        *readptr++ = DATAW_BYTES | read;
         *readptr++ = rlen;
         *readptr++ = rlen >> 8;
         for (i = 0; i <= rlen; i++)
             *readptr++ = *ptrin++;
         if (rlen < limit_len) {
             uint8_t ch = *ptrin++;
-            *readptr++ = DATAWBIT;
+            *readptr++ = DATAWBIT | read;
             *readptr++ = 0x06;
             *readptr++ = ch;        // 7 bits of data here
             memcpy(readptr, tail, tail_len);
@@ -367,31 +368,29 @@ static void test_pattern(struct ftdi_context *ftdi)
 #define IDTEST_PATTERN1                         \
      TMSW, 0x04, 0x7f, /* Reset????? */         \
      TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
-#define IDTEST_PATTERN2                         \
-     DATARW(63), PATTERN1, 0xff, 0x00, 0x00,    \
-     DATARWBIT, 0x06, 0x00
-#define IDTEST_PATTERN3                         \
-     SHIFT_TO_UPDATE_TO_IDLE_RW(0),             \
-     SEND_IMMEDIATE
 
 static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
-static uint8_t patdata[] =  {PATTERN1, 0xff, 0x00, 0x00, 0x00};
-static uint8_t pat3[] = {IDTEST_PATTERN3};
+static uint8_t patdata[64] =  {PATTERN1, 0xff, 0x00, 0x00, 0x00};
+static uint8_t pat3[] = { SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE};
 static void test_idcode(struct ftdi_context *ftdi)
 {
-    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN1, IDTEST_PATTERN2, IDTEST_PATTERN3 };
+    static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN1};
     int j;
-    WRITE_READ(ftdi, item4z, readdata3z);     // IDCODE 00ff
+    send_data_frame(ftdi, MPSSE_DO_READ|MREAD, item4z, sizeof(item4z), pat3, sizeof(pat3),
+        patdata, sizeof(patdata), 9999);
+    check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z));
     for (j = 0; j < 3; j++)
         test_pattern(ftdi);
 }
 
 static void check_idcode(struct ftdi_context *ftdi, int instance)
 {
-    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN1, IDTEST_PATTERN2, IDTEST_PATTERN3 };
+    static uint8_t item3z[] = { TMSW, 0x00, 0x01, IDTEST_PATTERN1};
     int j = 3, k = 2;
 
-    WRITE_READ(ftdi, item3z, readdata3z);     // IDCODE 00ff
+    send_data_frame(ftdi, MPSSE_DO_READ|MREAD, item3z, sizeof(item3z), pat3, sizeof(pat3),
+        patdata, sizeof(patdata), 9999);
+    check_ftdi_read_data_submit(ftdi, readdata3z, sizeof(readdata3z));
     if(instance) {
         while (j-- > 0)
             test_pattern(ftdi);
@@ -571,7 +570,7 @@ int main(int argc, char **argv)
         }
         for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
-        send_data_frame(ctxitem0z, headerp, header_len, tailp, tail_len,
+        send_data_frame(ctxitem0z, 0, headerp, header_len, tailp, tail_len,
             filebuffer, size, limit_len);
         limit_len = MAX_SINGLE_USB_DATA;
         headerp = TMS_STATE_1_0;         /* Pause-DR -> Shift-DR */
