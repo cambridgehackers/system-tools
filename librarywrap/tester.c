@@ -37,6 +37,72 @@
 
 #include "ftdi_reference.h"
 
+/*
+ * Generic FTDI initialization
+ */
+struct ftdi_context *init_ftdi(uint8_t *data, int size)
+{
+    struct ftdi_device_list *devlist, *curdev;
+    char serial[64], manuf[64], desc[128];
+    int i;
+
+    /*
+     * Locate USB interface for JTAG
+     */
+    struct ftdi_context *ftdi = ftdi_new();
+    ftdi_init(ftdi);
+    ftdi_usb_find_all(ftdi, &devlist, 0x0, 0x0);
+    curdev = devlist;
+    ftdi_usb_get_strings(ftdi, curdev->dev, manuf, sizeof(manuf),
+        desc, sizeof(desc), serial, sizeof(serial));
+    printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
+    ftdi_usb_open_dev(ftdi, curdev->dev);
+    ftdi_usb_reset(ftdi);
+    ftdi_list_free(&devlist);
+
+    /*
+     * Identify JTAG interface version
+     */
+    int eeprom_val;
+    uint8_t fbuf[256]; // since chiptype is 0x56, eerom size is 256
+    ftdi_read_eeprom(ftdi);
+    ftdi_eeprom_decode(ftdi, 0);
+    ftdi_get_eeprom_value(ftdi, CHIP_TYPE, &eeprom_val);
+    printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
+    ftdi_get_eeprom_buf(ftdi, fbuf, sizeof(fbuf));
+
+    /*
+     * Generic initialization of libftdi
+     */
+    ftdi_set_baudrate(ftdi, 9600);
+    ftdi_set_latency_timer(ftdi, 255);
+    ftdi_set_bitmode(ftdi, 0, 0);
+    ftdi_set_bitmode(ftdi, 0, 2);
+    ftdi_usb_purge_buffers(ftdi);
+    ftdi_usb_purge_rx_buffer(ftdi);
+    ftdi_usb_purge_tx_buffer(ftdi);
+
+    /*
+     * Generic command synchronization with ftdi chip
+     */
+    static uint8_t errorcode_fa[] = { 0xfa };
+    for (i = 0; i < 4; i++) {
+        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
+        ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
+        ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
+        static uint8_t readdata1z[] = { 0xaa };
+        ftdi_read_data(ftdi, readdata1z, sizeof(readdata1z));
+    }
+    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
+    ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
+    ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
+    static uint8_t readdata2z[] = { 0xab };
+    ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
+    if (size)
+        ftdi_write_data(ftdi, data, size);
+    return ftdi;
+}
+
 #define BUFFER_MAX_LEN      1000000
 #define FILE_READSIZE          6464
 #define MAX_SINGLE_USB_DATA    4045
@@ -110,7 +176,6 @@
 #define DATAR(A)           DREAD, INT16((A)-1) //2c
 #define DATARW(A) (DREAD|DWRITE), INT16((A)-1) //3d
 #define PULSE_CLOCK        0x8f
-#define SEND_IMMEDIATE     0x87
 
 #define IDLE_TO_SHIFT_IR   TMSW, 0x03, 0x03  /* Idle -> Shift-IR */
 #define IDLE_TO_SHIFT_DR   TMSW, 0x02, 0x01  /* Idle -> Shift-DR */
@@ -188,68 +253,6 @@ int i;
     printf("\n");
 }
 
-struct ftdi_context *init_ftdi(uint8_t *data, int size)
-{
-    struct ftdi_device_list *devlist, *curdev;
-    char serial[64], manuf[64], desc[128];
-    int i;
-
-    /*
-     * Locate USB interface for JTAG
-     */
-    struct ftdi_context *ftdi = ftdi_new();
-    ftdi_init(ftdi);
-    ftdi_usb_find_all(ftdi, &devlist, 0x0, 0x0);
-    curdev = devlist;
-    ftdi_usb_get_strings(ftdi, curdev->dev, manuf, sizeof(manuf),
-        desc, sizeof(desc), serial, sizeof(serial));
-    printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
-    ftdi_usb_open_dev(ftdi, curdev->dev);
-    ftdi_usb_reset(ftdi);
-    ftdi_list_free(&devlist);
-
-    /*
-     * Identify JTAG interface version
-     */
-    int eeprom_val;
-    uint8_t fbuf[256]; // since chiptype is 0x56, eerom size is 256
-    ftdi_read_eeprom(ftdi);
-    ftdi_eeprom_decode(ftdi, 0);
-    ftdi_get_eeprom_value(ftdi, CHIP_TYPE, &eeprom_val);
-    printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
-    ftdi_get_eeprom_buf(ftdi, fbuf, sizeof(fbuf));
-
-    /*
-     * Generic initialization of libftdi
-     */
-    ftdi_set_baudrate(ftdi, 9600);
-    ftdi_set_latency_timer(ftdi, 255);
-    ftdi_set_bitmode(ftdi, 0, 0);
-    ftdi_set_bitmode(ftdi, 0, 2);
-    ftdi_usb_purge_buffers(ftdi);
-    ftdi_usb_purge_rx_buffer(ftdi);
-    ftdi_usb_purge_tx_buffer(ftdi);
-
-    /*
-     * Generic command synchronization with ftdi chip
-     */
-    static uint8_t errorcode_fa[] = { 0xfa };
-    for (i = 0; i < 4; i++) {
-        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
-        ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
-        ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
-        static uint8_t readdata1z[] = { 0xaa };
-        ftdi_read_data(ftdi, readdata1z, sizeof(readdata1z));
-    }
-    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
-    ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
-    ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
-    static uint8_t readdata2z[] = { 0xab };
-    ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
-    if (size)
-        ftdi_write_data(ftdi, data, size);
-    return ftdi;
-}
 
 static uint8_t *pulse_gpio(int delay)
 {
@@ -442,38 +445,42 @@ static uint8_t request_data[] = {
     ftdi_transfer_data_done(ftdi_write_data_submit(ftdi, itor, sizeof(itor)));
 }
 
-static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
+static uint8_t *catlist(uint8_t *arg[])
 {
     static uint8_t prebuffer[BUFFER_MAX_LEN];
-    static uint8_t smap1[] = {
+    uint8_t *ptr = prebuffer + 1;
+    while (*arg) {
+        memcpy(ptr, *arg+1, (*arg)[0]);
+        ptr += (*arg)[0];
+        arg++;
+    }
+    prebuffer[0] = ptr - (prebuffer + 1);
+    return prebuffer;
+}
+static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
+{
+    //static uint8_t prebuffer[BUFFER_MAX_LEN];
+    static uint8_t smap1[] = DITEM(
          JTAG_IRREG(IRREG_CFG_IN),
          IDLE_TO_SHIFT_DR,
          DATAW(4), SWAP32(SMAP_DUMMY),
          DATAW(4), SWAP32(SMAP_SYNC),
          DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-         DATAW(4),};
-    uint8_t temp[sizeof(data)] = {SWAP32(data)};
+         DATAW(4));
+    uint8_t temp[] = {4, SWAP32(data)};
 
-    static uint8_t smap2[] = {
+    static uint8_t smap2[] = DITEM(
          DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
          DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
          DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
          DATAW(4), SWAP32(SMAP_CMD_DESYNC),
-         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-         };
+         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))
+         );
     static uint8_t request_data[] = {INT32(4)};
 
-    uint8_t *ptr = prebuffer+1;
-    memcpy(ptr, prefix+1, prefix[0]);
-    ptr += prefix[0];
-    memcpy(ptr, smap1, sizeof(smap1));
-    ptr += sizeof(smap1);
-    memcpy(ptr, temp, sizeof(temp));
-    ptr += sizeof(temp);
-    memcpy(ptr, smap2, sizeof(smap2));
-    ptr += sizeof(smap2);
-    prebuffer[0] = ptr - (prebuffer + 1);
-    send_data_frame(ftdi, 0, prebuffer, DITEM(   \
+    uint8_t *alist[] = {prefix, smap1, temp, smap2, 0};
+    uint8_t *p = catlist(alist);
+    send_data_frame(ftdi, 0, p, DITEM(   \
          SHIFT_TO_EXIT1(0),           \
          EXIT1_TO_IDLE,               \
          JTAG_IRREG(IRREG_CFG_OUT),   \
@@ -552,22 +559,16 @@ int main(int argc, char **argv)
     /*
      * Step 2: Initialization
      */
-    static uint8_t item15z[1000];
-    uint8_t *item15ptr = item15z;
-    static uint8_t program_data[] = {
+    static uint8_t program_data[] = DITEM(
          IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
          JTAG_IRREG(IRREG_JPROGRAM),
          JTAG_IRREG(IRREG_ISC_NOOP)
-    };
-    static uint8_t isc_noop[] = { JTAG_IRREG_RW(IRREG_ISC_NOOP) };
-    memcpy(item15ptr, program_data, sizeof(program_data));
-    item15ptr += sizeof(program_data);
+    );
+    static uint8_t isc_noop[] = DITEM( JTAG_IRREG_RW(IRREG_ISC_NOOP) );
     uint8_t *pdata = pulse_gpio(15000000/80);  // 12.5 msec
-    memcpy(item15ptr, pdata+1, pdata[0]);
-    item15ptr += pdata[0];
-    memcpy(item15ptr, isc_noop, sizeof(isc_noop));
-    item15ptr += sizeof(isc_noop);
-    writetc = ftdi_write_data_submit(ctxitem0z, item15z, item15ptr - item15z);
+    uint8_t *alist[] = {program_data, pdata, isc_noop, 0};
+    uint8_t *p = catlist(alist);
+    writetc = ftdi_write_data_submit(ctxitem0z, p+1, p[0]);
     check_ftdi_read_data_submit(ctxitem0z, DITEM( INT16(0x4488) ));
 
     /*
@@ -602,21 +603,20 @@ int main(int argc, char **argv)
     /*
      * Step 8: Startup
      */
-    pdata = pulse_gpio(15000000/800);  // 1.25 msec
-    send_smap(ctxitem0z, pdata,
+    send_smap(ctxitem0z, pulse_gpio(15000000/800),  // 1.25 msec
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1), DITEM( INT32(0), 0x80 ));
 
-    WRITE_READ(ctxitem0z, DITEM( \
-         EXIT1_TO_IDLE,\
-         JTAG_IRREG(IRREG_BYPASS),\
-         JTAG_IRREG(IRREG_JSTART),\
-         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */\
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
-         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
-         TMSW, 0x01, 0x00,\
+    WRITE_READ(ctxitem0z, DITEM( 
+         EXIT1_TO_IDLE,
+         JTAG_IRREG(IRREG_BYPASS),
+         JTAG_IRREG(IRREG_JSTART),
+         TMSW, 0x00, 0x00,  /* Hang out in Idle for a while */
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,
+         TMSW, 0x01, 0x00,
          JTAG_IRREG_RW(IRREG_BYPASS)), DITEM( INT16(0xd6ac) ));
 
     send_smap(ctxitem0z, DITEM( EXIT1_TO_IDLE ),
