@@ -382,9 +382,9 @@ static void test_pattern(struct ftdi_context *ftdi)
      TMSW, 0x04, 0x7f, /* Reset????? */         \
      TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
 
-static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
 static uint8_t patdata[] =  {PATTERN1, INT32(0xff)};
 static uint8_t pat3[] = { SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE};
+static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
 static void test_idcode(struct ftdi_context *ftdi)
 {
     static uint8_t item4z[] = { IDLE_TO_RESET, IDTEST_PATTERN1};
@@ -465,32 +465,32 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, int prefix_len
     uint8_t *rdata, int rdata_len)
 {
     static uint8_t prebuffer[BUFFER_MAX_LEN];
-static uint8_t smap1[] = {
-     JTAG_IRREG(IRREG_CFG_IN),
-     IDLE_TO_SHIFT_DR,
-     DATAW(4), SWAP32(SMAP_DUMMY),
-     DATAW(4), SWAP32(SMAP_SYNC),
-     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-     DATAW(4),};
-uint8_t temp[sizeof(data)] = {SWAP32(data)};
-
-static uint8_t smap2[] = {
-     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
-     DATAW(4), SWAP32(SMAP_CMD_DESYNC),
-     DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-     };
-static uint8_t request_data[] = {INT32(4)};
-static uint8_t smap3[] = {
-     SHIFT_TO_EXIT1(0),
-     EXIT1_TO_IDLE,
-     JTAG_IRREG(IRREG_CFG_OUT),
-     IDLE_TO_SHIFT_DR,
-     DATARW(3), 0x00, 0x00, 0x00,
-     DATARWBIT, 0x06, 0x00,
-     SHIFT_TO_EXIT1_RW(0),
-     SEND_IMMEDIATE };
+    static uint8_t smap1[] = {
+         JTAG_IRREG(IRREG_CFG_IN),
+         IDLE_TO_SHIFT_DR,
+         DATAW(4), SWAP32(SMAP_DUMMY),
+         DATAW(4), SWAP32(SMAP_SYNC),
+         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+         DATAW(4),};
+    uint8_t temp[sizeof(data)] = {SWAP32(data)};
+    
+    static uint8_t smap2[] = {
+         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
+         DATAW(4), SWAP32(SMAP_CMD_DESYNC),
+         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+         };
+    static uint8_t request_data[] = {INT32(4)};
+    static uint8_t smap3[] = {
+         SHIFT_TO_EXIT1(0),
+         EXIT1_TO_IDLE,
+         JTAG_IRREG(IRREG_CFG_OUT),
+         IDLE_TO_SHIFT_DR,
+         DATARW(3), 0x00, 0x00, 0x00,
+         DATARWBIT, 0x06, 0x00,
+         SHIFT_TO_EXIT1_RW(0),
+         SEND_IMMEDIATE };
 
     uint8_t *ptr = prebuffer;
     memcpy(ptr, prefix, prefix_len);
@@ -604,7 +604,7 @@ int main(int argc, char **argv)
      * Step 6: Load Configuration Data Frames
      */
     static uint8_t item16z[] = { EXIT1_TO_IDLE, JTAG_IRREG_RW(IRREG_CFG_IN) };
-    static uint8_t readdata10z[] = { 0x8a, 0x45 };
+    static uint8_t readdata10z[] = { INT16(0x458a) };
     WRITE_READ(ctxitem0z, item16z, readdata10z);
 
     printf("Starting to send file '%s'\n", argv[1]);
