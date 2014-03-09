@@ -375,9 +375,9 @@ static void test_pattern(struct ftdi_context *ftdi)
      TMSW, 0x04, 0x7f, /* Reset????? */         \
      TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
 
-static uint8_t patdata[] =  {PATTERN1, INT32(0xff)};
+static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
 static uint8_t pat3[] = DITEM( SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE);
-static uint8_t readdata3z[] = DITEM( IDCODE_VALUE, PATTERN1, 0x00 );
+static uint8_t readdata3z[] = DITEM( IDCODE_VALUE, PATTERN1, 0x00);
 static void test_idcode(struct ftdi_context *ftdi)
 {
     int j;
@@ -526,7 +526,7 @@ int main(int argc, char **argv)
     /*
      * Step 5: Check Device ID
      */
-    static uint8_t iddata[] = { PATTERN2, INT32(0xffffffff) };
+    static uint8_t iddata[] = {INT32(0xffffffff),  PATTERN2};
     send_data_frame(ftdi, DREAD,
         DITEM(TMSW, 0x00, 0x01,  /* ... -> Reset */
              IN_RESET_STATE,
