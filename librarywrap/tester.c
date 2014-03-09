@@ -168,7 +168,7 @@
 
 #define WRITE_READ(FTDI, A, B) \
     writetc = ftdi_write_data_submit(FTDI, (A)+1, (A)[0]); \
-    check_ftdi_read_data_submit(FTDI, B, sizeof(B)); \
+    check_ftdi_read_data_submit(FTDI, (B)+1, (B)[0]); \
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -362,7 +362,7 @@ static void test_pattern(struct ftdi_context *ftdi)
                     IDLE_TO_SHIFT_DR,                          \
                     DATAW(1), 0x69,       /* in Shift-DR */    \
                     DATAWBIT, 0x01, 0x00, )); /* in Shift-DR */
-    static uint8_t readdata_five_zeros[] = { INT32(0), 0x00 };
+    static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
     int i;
 
     WRITE_READ(ftdi, item5z, readdata_five_zeros);
@@ -547,11 +547,11 @@ int main(int argc, char **argv)
          EXTENDED_COMMAND(IRREG_USERCODE), \
          IDLE_TO_SHIFT_DR, \
          COMMAND_ENDING);
-    static uint8_t readdata_five_ff[] = { 0xff, INT32(0xffffffff) };
+    static uint8_t readdata_five_ff[] = DITEM( 0xff, INT32(0xffffffff) );
     WRITE_READ(ctxitem0z, item11z, readdata_five_ff);
     for (i = 0; i < 3; i++) {
         static uint8_t item12z[] = DITEM( EXTENDED_COMMAND_RW(IRREG_BYPASS), SEND_IMMEDIATE );
-        static uint8_t readdata7z[] = { INT16(0xf5af) };
+        static uint8_t readdata7z[] = DITEM( INT16(0xf5af) );
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
     read_status(ctxitem0z, 0);
@@ -583,7 +583,7 @@ int main(int argc, char **argv)
      * Step 6: Load Configuration Data Frames
      */
     static uint8_t item16z[] = DITEM( EXIT1_TO_IDLE, JTAG_IRREG_RW(IRREG_CFG_IN) );
-    static uint8_t readdata10z[] = { INT16(0x458a) };
+    static uint8_t readdata10z[] = DITEM( INT16(0x458a) );
     WRITE_READ(ctxitem0z, item16z, readdata10z);
 
     printf("Starting to send file '%s'\n", argv[1]);
@@ -630,7 +630,7 @@ int main(int argc, char **argv)
          TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,\
          TMSW, 0x01, 0x00,\
          JTAG_IRREG_RW(IRREG_BYPASS));
-    static uint8_t readdata12z[] = { INT16(0xd6ac) };
+    static uint8_t readdata12z[] = DITEM( INT16(0xd6ac) );
     WRITE_READ(ctxitem0z, item18z, readdata12z);
 
     static uint8_t readdata13z[] = { 0x02, SWAP32B(0xfcfe7910) };
@@ -646,7 +646,7 @@ int main(int argc, char **argv)
          IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE, \
          EXTENDED_COMMAND_RW(IRREG_BYPASS), \
          SEND_IMMEDIATE);
-    static uint8_t readdata14z[] = { INT16(0xf5a9) };
+    static uint8_t readdata14z[] = DITEM( INT16(0xf5a9) );
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
     read_status(ctxitem0z, 1);
