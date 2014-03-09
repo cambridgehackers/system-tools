@@ -64,9 +64,6 @@
 
 #define IDCODE_VALUE INT32(IDCODE_VERSION | IDCODE_XC7K325T)
 
-#define GPIO_DONE            0x10
-#define GPIO_01              0x01
-#define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
 #define SET_CLOCK_DIVISOR    0x86, INT16(1)   // 15MHz (since disable clk divide by 5)
 
 #define IRREG_USER2          0x003
@@ -190,7 +187,7 @@ int i;
     printf("\n");
 }
 
-struct ftdi_context *init_ftdi()
+struct ftdi_context *init_ftdi(uint8_t *data, int size)
 {
     struct ftdi_device_list *devlist, *curdev;
     char serial[64], manuf[64], desc[128];
@@ -248,11 +245,17 @@ struct ftdi_context *init_ftdi()
     ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
     static uint8_t readdata2z[] = { 0xab };
     ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
+    if (size)
+        ftdi_write_data(ftdi, data, size);
     return ftdi;
 }
 
 static uint8_t *pulse_gpio(int delay, int *size)
 {
+#define GPIO_DONE            0x10
+#define GPIO_01              0x01
+#define SET_LSB_DIRECTION(A) 0x80, 0xe0, (0xea | (A))
+
     static uint8_t prebuffer[BUFFER_MAX_LEN];
     static uint8_t pulsepre[] = {
          SET_LSB_DIRECTION(GPIO_DONE | GPIO_01),
@@ -380,7 +383,7 @@ static void test_pattern(struct ftdi_context *ftdi)
      TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
 
 static uint8_t readdata3z[] = { IDCODE_VALUE, PATTERN1, 0x00 };
-static uint8_t patdata[64] =  {PATTERN1, 0xff, 0x00, 0x00, 0x00};
+static uint8_t patdata[] =  {PATTERN1, INT32(0xff)};
 static uint8_t pat3[] = { SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE};
 static void test_idcode(struct ftdi_context *ftdi)
 {
@@ -514,7 +517,6 @@ int main(int argc, char **argv)
     }
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = BSWAP(i);
-    ctxitem0z = init_ftdi();
 
     /*
      * Initialize FTDI chip and GPIO pins
@@ -529,7 +531,7 @@ int main(int argc, char **argv)
          0x82, 0x00, 0x00,
          FORCE_RETURN_TO_RESET
     };
-    ftdi_write_data(ctxitem0z, initialize_sequence, sizeof(initialize_sequence));
+    ctxitem0z = init_ftdi(initialize_sequence, sizeof(initialize_sequence));
 
     check_idcode(ctxitem0z, 0);
     static uint8_t item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
@@ -569,7 +571,7 @@ int main(int argc, char **argv)
     WRITE_READ(ctxitem0z, item11z, readdata_five_ff);
     for (i = 0; i < 3; i++) {
         static uint8_t item12z[] = { EXTENDED_COMMAND_RW(IRREG_BYPASS), SEND_IMMEDIATE };
-        static uint8_t readdata7z[] = { 0xaf, 0xf5 };
+        static uint8_t readdata7z[] = { INT16(0xf5af) };
         WRITE_READ(ctxitem0z, item12z, readdata7z);
     }
     read_status(ctxitem0z, 0);
@@ -681,7 +683,6 @@ int main(int argc, char **argv)
     WRITE_READ(ctxitem0z, item21z, readdata14z);
     test_idcode(ctxitem0z);
     read_status(ctxitem0z, 1);
-
     ftdi_deinit(ctxitem0z);
     return 0;
 }
