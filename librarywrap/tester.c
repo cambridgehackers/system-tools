@@ -48,6 +48,7 @@
          | (((A) & 0x10) >> 1) | (((A) & 0x20) >> 3) | (((A) & 0x40) >> 5) | (((A) & 0x80) >> 7))
 #define MS(A)              BSWAP(M(A))
 #define SWAP32(A)          MS((A) >> 24), MS((A) >> 16), MS((A) >> 8), MS(A)
+#define SWAP32B(A)         MS(A), MS((A) >> 8), MS((A) >> 16), MS((A) >> 24)
 
 /*
  * Xilinx constants
@@ -380,7 +381,9 @@ static void read_status(struct ftdi_context *ftdi, int instance)
 uint8_t *data;
 int i, size;
 
-#define READ_STAT_REG1               \
+#define READ_STAT_REG1(...)          \
+     IDLE_TO_RESET,                  \
+     __VA_ARGS__                     \
      RESET_TO_IDLE,                  \
      EXTENDED_COMMAND(IRREG_CFG_IN), \
      IDLE_TO_SHIFT_DR
@@ -395,22 +398,19 @@ static uint8_t finish_req[] = {
      COMMAND_ENDING};
 
     if (!instance) {
-        static uint8_t item13z[] = { IDLE_TO_RESET, READ_STAT_REG1 };
+        static uint8_t item13z[] = { READ_STAT_REG1() };
         data = item13z;
         size = sizeof(item13z);
     }
     else {
         static uint8_t item22z[] = {
-             IDLE_TO_RESET,
-             IN_RESET_STATE,
-             TMSW, 0x00, 0x01,  /* ... -> Reset */
-             READ_STAT_REG1 };
+             READ_STAT_REG1(IN_RESET_STATE, TMSW, 0x00, 0x01, )};  /* ... -> Reset */
         data = item22z;
         size = sizeof(item22z);
     }
     send_data_frame(ftdi, 0, data, size, finish_req, sizeof(finish_req),
         request_data, sizeof(request_data), 9999);
-    static uint8_t returned_status[] = { 2, SWAP32(0x1079fef0) };
+    static uint8_t returned_status[] = { 2, SWAP32B(0xf0fe7910) };
     check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
     union {
         uint32_t i;
