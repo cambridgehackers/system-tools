@@ -405,20 +405,22 @@ static void read_status(struct ftdi_context *ftdi, int instance)
 uint8_t *data;
 int i, size;
 
-#define READ_STAT_REG                         \
-     EXTENDED_COMMAND(IRREG_CFG_IN),          \
-     IDLE_TO_SHIFT_DR,                        \
-     DATAW_BYTES_LEN(19),                     \
-          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
-          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), 0x00, 0x00, 0x00,  \
-     DATAWBIT, 0x06, 0x00,                    \
-     SHIFT_TO_UPDATE_TO_IDLE(0),              \
-     EXTENDED_COMMAND(IRREG_CFG_OUT),         \
-     IDLE_TO_SHIFT_DR,                        \
-     COMMAND_ENDING
+#define READ_STAT_REG1               \
+     RESET_TO_IDLE,                  \
+     EXTENDED_COMMAND(IRREG_CFG_IN), \
+     IDLE_TO_SHIFT_DR
+
+static uint8_t request_data[] = {
+     SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
+     SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0)};
+static uint8_t finish_req[] = {
+     SHIFT_TO_UPDATE_TO_IDLE(0),             
+     EXTENDED_COMMAND(IRREG_CFG_OUT),       
+     IDLE_TO_SHIFT_DR,                     
+     COMMAND_ENDING};
 
     if (!instance) {
-        static uint8_t item13z[] = { IDLE_TO_RESET, RESET_TO_IDLE, READ_STAT_REG };
+        static uint8_t item13z[] = { IDLE_TO_RESET, READ_STAT_REG1 };
         data = item13z;
         size = sizeof(item13z);
     }
@@ -427,19 +429,19 @@ int i, size;
              IDLE_TO_RESET,
              IN_RESET_STATE,
              TMSW, 0x00, 0x01,  /* ... -> Reset */
-             RESET_TO_IDLE,
-             READ_STAT_REG };
+             READ_STAT_REG1 };
         data = item22z;
         size = sizeof(item22z);
     }
-    writetc = ftdi_write_data_submit(ftdi, data, size);
-    static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
+    send_data_frame(ftdi, 0, data, size, finish_req, sizeof(finish_req),
+        request_data, sizeof(request_data), 9999);
+    //static uint8_t returned_status[] = { INT32(0x7f9e0802), 0x0f };
+    static uint8_t returned_status[] = { 2, SWAP32(0x1079fef0) };
     check_ftdi_read_data_submit(ftdi, returned_status, sizeof(returned_status));
     union {
         uint32_t i;
         uint8_t  c[4];
     } status;
-    //memdump(last_read_data, sizeof(returned_status), "STATUS");
     for (i = 0; i < 4; i++)
         status.c[i] = bitswap[last_read_data[i+1]];
     printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
