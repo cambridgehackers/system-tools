@@ -105,7 +105,6 @@ struct ftdi_context *init_ftdi(void)
 #define FILE_READSIZE          6464
 #define MAX_SINGLE_USB_DATA    4045
 #define DITEM(...) ((uint8_t[]){sizeof((uint8_t[]){ __VA_ARGS__ }), __VA_ARGS__})
-#define TOKENPASTE4(A, B, C, D) (A ## B ## C ## D)
 #define M(A)               ((A) & 0xff)
 #define INT16(A)           M(A), M((A) >> 8)
 #define INT32(A)           INT16(A), INT16((A) >> 16)
@@ -119,12 +118,12 @@ struct ftdi_context *init_ftdi(void)
  * Xilinx constants
  */
 // IDCODE from bsd file
-#define IDCODE_XC7K325T    TOKENPASTE4(  \
-      /*XXXX         / version */        \
-      0b0011011,     /* family */        \
-        001010001,   /* array size */    \
-        00001001001, /* manufacturer */  \
-        1)           /* required by 1149.1 */
+#define IDCODE_XC7K325T  (  \
+     /*               XXXX  /  version */        \
+          (0b0011011 << 21) /* family */        \
+     |  (0b001010001 << 12) /* array size */    \
+     |(0b00001001001 <<  1) /* manufacturer */  \
+     |                   1) /* required by 1149.1 */
 #define IDCODE_VERSION     0x40000000
 
 #define IDCODE_VALUE INT32(IDCODE_VERSION | IDCODE_XC7K325T)
@@ -419,36 +418,25 @@ static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
     }
 }
 
-
-static void read_status(struct ftdi_context *ftdi, uint8_t *extra)
+static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
+static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3)
 {
-int i;
-uint8_t *stat2 =
-     DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
-uint8_t *stat3 = NULL;
+    int i;
+    union {
+        uint32_t i;
+        uint8_t  c[4];
+    } status;
+    static uint8_t request_data[] = {
+         SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
+         SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0)};
 
-static uint8_t request_data[] = {
-     SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
-     SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0)};
-
-    if (extra) {
-        stat3 = stat2;
-        stat2 = extra;
-    }
     uint8_t *lastp = send_data_frame(ftdi, 0,
-        (uint8_t *[]){DITEM(IDLE_TO_RESET),
-            stat2,
-            stat3,
-            NULL},
+        (uint8_t *[]){DITEM(IDLE_TO_RESET), stat2, stat3, NULL},
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
             EXTENDED_COMMAND(0, IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
         request_data, sizeof(request_data), 9999, DITEM( 2, SWAP32B(0xf0fe7910) ));
-    union {
-        uint32_t i;
-        uint8_t  c[4];
-    } status;
     for (i = 0; i < 4; i++)
         status.c[i] = bitswap[lastp[i+1]];
     printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
@@ -543,7 +531,7 @@ int main(int argc, char **argv)
         WRITE_READ(ftdi,
             DITEM( EXTENDED_COMMAND(DREAD, IRREG_BYPASS), SEND_IMMEDIATE ),
             DITEM( INT16(0xf5af) ));
-    read_status(ftdi, NULL);
+    read_status(ftdi, cfg_in_command, NULL);
     check_idcode(ftdi, 3, DITEM( RESET_TO_RESET));
     check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
     check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
@@ -599,7 +587,7 @@ int main(int argc, char **argv)
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
     check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
-    read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET));
+    read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
     ftdi_deinit(ftdi);
     return 0;
 }
