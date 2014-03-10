@@ -293,7 +293,6 @@ static uint8_t *pulse_gpio(int delay)
 
 static struct ftdi_transfer_control* writetc;
 static uint8_t bitswap[256];
-static uint8_t last_read_data[10000];
 
 #define WRITE_READ(FTDI, A, B) \
     data_submit(FTDI, 0, (A)+1, (A)[0]); \
@@ -307,9 +306,11 @@ static void data_submit(struct ftdi_context *ftdi, int wait, uint8_t *buf, int s
         writetc = NULL;
     }
 }
-static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf)
+static uint8_t *check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf)
 {
+    static uint8_t last_read_data[10000];
     struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, buf[0]);
+
     if (writetc)
         ftdi_transfer_data_done(writetc);
     writetc = NULL;
@@ -319,10 +320,11 @@ static void check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf)
         memdump(buf+1, buf[0], "EXPECT");
         memdump(last_read_data, buf[0], "ACTUAL");
     }
+    return last_read_data;
 }
 
-static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *header,
-    uint8_t *tail, uint8_t *ptrin, int size, int limit_len)
+static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *header,
+    uint8_t *tail, uint8_t *ptrin, int size, int limit_len, uint8_t *checkdata)
 {
     int i;
     static uint8_t packetbuffer[BUFFER_MAX_LEN];
@@ -354,6 +356,9 @@ static void send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *he
         size -= limit_len+1;
         readptr = packetbuffer;
     }
+    if(checkdata)
+        return check_ftdi_read_data_submit(ftdi, checkdata);
+    return NULL;
 }
 
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
@@ -401,8 +406,7 @@ static void test_idcode(struct ftdi_context *ftdi)
 {
     int j;
     send_data_frame(ftdi, DREAD, DITEM( IDLE_TO_RESET, IDTEST_PATTERN1),
-        pat3, patdata, sizeof(patdata), 9999);
-    check_ftdi_read_data_submit(ftdi, readdata3z);
+        pat3, patdata, sizeof(patdata), 9999, readdata3z);
     for (j = 0; j < 3; j++)
         test_pattern(ftdi);
 }
@@ -412,8 +416,7 @@ static void check_idcode(struct ftdi_context *ftdi, int instance)
     int j = 3, k = 2;
 
     send_data_frame(ftdi, DREAD, DITEM( RESET_TO_RESET, IDTEST_PATTERN1),
-        pat3, patdata, sizeof(patdata), 9999);
-    check_ftdi_read_data_submit(ftdi, readdata3z);
+        pat3, patdata, sizeof(patdata), 9999, readdata3z);
     if(instance) {
         while (j-- > 0)
             test_pattern(ftdi);
@@ -443,19 +446,18 @@ static uint8_t request_data[] = {
         data = DITEM( READ_STAT_REG1() );
     else
         data = DITEM(READ_STAT_REG1(IN_RESET_STATE, RESET_TO_RESET, ));
-    send_data_frame(ftdi, 0, data,
+    uint8_t *lastp = send_data_frame(ftdi, 0, data,
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0),
             EXTENDED_COMMAND(IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
-        request_data, sizeof(request_data), 9999);
-    check_ftdi_read_data_submit(ftdi, DITEM( 2, SWAP32B(0xf0fe7910) ));
+        request_data, sizeof(request_data), 9999, DITEM( 2, SWAP32B(0xf0fe7910) ));
     union {
         uint32_t i;
         uint8_t  c[4];
     } status;
     for (i = 0; i < 4; i++)
-        status.c[i] = bitswap[last_read_data[i+1]];
+        status.c[i] = bitswap[lastp[i+1]];
     printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
         status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
     static uint8_t itor[] = { IDLE_TO_RESET };
@@ -503,8 +505,7 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
          DATARW(3), 0x00, 0x00, 0x00,
          DATARWBIT, 0x06, 0x00,
          SHIFT_TO_EXIT1_RW(0),
-         SEND_IMMEDIATE ), request_data, sizeof(request_data), 9999);
-    check_ftdi_read_data_submit(ftdi, rdata);
+         SEND_IMMEDIATE ), request_data, sizeof(request_data), 9999, rdata);
 }
 
 int main(int argc, char **argv)
@@ -553,8 +554,7 @@ int main(int argc, char **argv)
              RESET_TO_IDLE,
              IDLE_TO_SHIFT_DR),
         DITEM(PAUSE_TO_SHIFT_RW, SEND_IMMEDIATE),
-        iddata, sizeof(iddata), 9999);
-    check_ftdi_read_data_submit(ftdi, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
+        iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
 
     WRITE_READ(ftdi, DITEM(
          FORCE_RETURN_TO_RESET,
@@ -604,7 +604,7 @@ int main(int argc, char **argv)
             tailp = DITEM(SHIFT_TO_EXIT1(0), EXIT1_TO_IDLE);
         for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
-        send_data_frame(ftdi, 0, headerp, tailp, filebuffer, size, limit_len);
+        send_data_frame(ftdi, 0, headerp, tailp, filebuffer, size, limit_len, NULL);
         limit_len = MAX_SINGLE_USB_DATA;
         headerp = DITEM(PAUSE_TO_SHIFT);
     }
