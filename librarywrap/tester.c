@@ -243,6 +243,19 @@ int i;
     printf("\n");
 }
 
+static uint8_t *catlist(uint8_t *arg[])
+{
+    static uint8_t prebuffer[BUFFER_MAX_LEN];
+    uint8_t *ptr = prebuffer + 1;
+    while (*arg) {
+        memcpy(ptr, *arg+1, (*arg)[0]);
+        ptr += (*arg)[0];
+        arg++;
+    }
+    prebuffer[0] = ptr - (prebuffer + 1);
+    return prebuffer;
+}
+
 static uint8_t *pulse_gpio(int delay)
 {
 #define GPIO_DONE            0x10
@@ -387,22 +400,24 @@ static void test_pattern(struct ftdi_context *ftdi)
 static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
 static uint8_t pat3[] = DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE);
 static uint8_t readdata3z[] = DITEM( IDCODE_VALUE, PATTERN1, 0x00);
-static void test_idcode(struct ftdi_context *ftdi, int j)
+static void test_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
 {
-    send_data_frame(ftdi, DREAD, DITEM( IDLE_TO_RESET, IDTEST_PATTERN1),
+    send_data_frame(ftdi, DREAD,
+        catlist((uint8_t *[]){statep, DITEM( IDTEST_PATTERN1), NULL}),
         pat3, patdata, sizeof(patdata), 9999, readdata3z);
     while (j-- > 0)
         test_pattern(ftdi);
 }
 
-static void check_idcode(struct ftdi_context *ftdi, int j, int k)
+static void check_idcode(struct ftdi_context *ftdi, int j, int k, uint8_t *statep)
 {
-    send_data_frame(ftdi, DREAD, DITEM( RESET_TO_RESET, IDTEST_PATTERN1),
+    send_data_frame(ftdi, DREAD,
+        catlist((uint8_t *[]){statep, DITEM( IDTEST_PATTERN1), NULL}),
         pat3, patdata, sizeof(patdata), 9999, readdata3z);
     while (j-- > 0)
         test_pattern(ftdi);
     while (k-- > 0)
-        test_idcode(ftdi, 3);
+        test_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
 }
 
 static void read_status(struct ftdi_context *ftdi, int instance)
@@ -443,18 +458,6 @@ static uint8_t request_data[] = {
     data_submit(ftdi, 1, itor, sizeof(itor));
 }
 
-static uint8_t *catlist(uint8_t *arg[])
-{
-    static uint8_t prebuffer[BUFFER_MAX_LEN];
-    uint8_t *ptr = prebuffer + 1;
-    while (*arg) {
-        memcpy(ptr, *arg+1, (*arg)[0]);
-        ptr += (*arg)[0];
-        arg++;
-    }
-    prebuffer[0] = ptr - (prebuffer + 1);
-    return prebuffer;
-}
 static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
 {
     static uint8_t request_data[] = {INT32(4)};
@@ -511,7 +514,7 @@ int main(int argc, char **argv)
 
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = BSWAP(i);
-    check_idcode(ftdi, 0, 2);
+    check_idcode(ftdi, 0, 2, DITEM( RESET_TO_RESET));
     static uint8_t item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
     data_submit(ftdi, 1, item8z, sizeof(item8z));
     static uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
@@ -542,7 +545,7 @@ int main(int argc, char **argv)
         WRITE_READ(ftdi, DITEM( EXTENDED_COMMAND(DREAD, IRREG_BYPASS), SEND_IMMEDIATE ),
             DITEM( INT16(0xf5af) ));
     read_status(ftdi, 0);
-    check_idcode(ftdi, 3, 3);
+    check_idcode(ftdi, 3, 3, DITEM( RESET_TO_RESET));
 
     /*
      * Step 2: Initialization
@@ -607,7 +610,7 @@ int main(int argc, char **argv)
               EXTENDED_COMMAND(DREAD, IRREG_BYPASS),
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
-    test_idcode(ftdi, 3);
+    test_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
     read_status(ftdi, 1);
     ftdi_deinit(ftdi);
     return 0;
