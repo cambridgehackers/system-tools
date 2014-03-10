@@ -479,9 +479,8 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
             DATAW(4), SWAP32(SMAP_CMD_DESYNC),
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), 0};
-    uint8_t *p = catlist(alist);
 
-    send_data_frame(ftdi, 0, p, DITEM(
+    send_data_frame(ftdi, 0, catlist(alist), DITEM(
          SHIFT_TO_EXIT1(0, 0),
          EXIT1_TO_IDLE,
          JTAG_IRREG(0, IRREG_CFG_OUT, EXIT1_TO_IDLE),
@@ -564,8 +563,7 @@ int main(int argc, char **argv)
          pulse_gpio(15000000/80) /* 12.5 msec */,
          DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP, SEND_IMMEDIATE) ), 0};
     uint8_t *p = catlist(alist);
-    data_submit(ftdi, 0, p+1, p[0]);
-    check_ftdi_read_data_submit(ftdi, DITEM( INT16(0x4488) ));
+    WRITE_READ(ftdi, p, DITEM( INT16(0x4488) ));
 
     /*
      * Step 6: Load Configuration Data Frames
