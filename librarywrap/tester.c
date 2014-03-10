@@ -354,6 +354,31 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
     return NULL;
 }
 
+static uint8_t bitswap[256];
+static void send_data_file(struct ftdi_context *ftdi, const char *filename)
+{
+    int size, i;
+    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
+    uint8_t *headerp =
+         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
+    int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
+
+    printf("Starting to send file '%s'\n", filename);
+    int inputfd = open(filename, O_RDONLY);
+    do {
+        static uint8_t filebuffer[FILE_READSIZE];
+        size = read(inputfd, filebuffer, FILE_READSIZE);
+        if (size < FILE_READSIZE)
+            tailp = DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE);
+        for (i = 0; i < size; i++)
+            filebuffer[i] = bitswap[filebuffer[i]];
+        send_data_frame(ftdi, 0, (uint8_t *[]){headerp, NULL}, tailp, filebuffer, size, limit_len, NULL);
+        headerp = DITEM(PAUSE_TO_SHIFT);
+        limit_len = MAX_SINGLE_USB_DATA;
+    } while(size == FILE_READSIZE);
+    printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
+}
+
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
      DATAR(3),                                              \
      DATARBIT, 0x06,                                        \
@@ -394,7 +419,6 @@ static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
     }
 }
 
-static uint8_t bitswap[256];
 
 static void read_status(struct ftdi_context *ftdi, uint8_t *extra)
 {
@@ -485,13 +509,15 @@ int main(int argc, char **argv)
          FORCE_RETURN_TO_RESET
     };
     ftdi_write_data(ftdi, initialize_sequence, sizeof(initialize_sequence));
-
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = BSWAP(i);
+
+    /*
+     * Step 5: Check Device ID
+     */
     check_idcode(ftdi, 0, DITEM( RESET_TO_RESET));
-    int k = 2;
-    while (k-- > 0)
-        check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
 
     WRITE_READ(ftdi,
        DITEM(IDLE_TO_RESET, IN_RESET_STATE),
@@ -499,9 +525,6 @@ int main(int argc, char **argv)
     static uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
     ftdi_write_data(ftdi, command_set_divisor, sizeof(command_set_divisor));
 
-    /*
-     * Step 5: Check Device ID
-     */
     static uint8_t iddata[] = {INT32(0xffffffff),  PATTERN2};
     send_data_frame(ftdi, DREAD,
         (uint8_t *[]){DITEM(RESET_TO_RESET, IN_RESET_STATE,
@@ -511,9 +534,7 @@ int main(int argc, char **argv)
         iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
 
     WRITE_READ(ftdi,
-        DITEM(FORCE_RETURN_TO_RESET,
-            IN_RESET_STATE,
-            RESET_TO_IDLE,
+        DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
             EXTENDED_COMMAND(0, IRREG_USERCODE),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
@@ -524,9 +545,9 @@ int main(int argc, char **argv)
             DITEM( INT16(0xf5af) ));
     read_status(ftdi, NULL);
     check_idcode(ftdi, 3, DITEM( RESET_TO_RESET));
-    k = 3;
-    while (k-- > 0)
-        check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
 
     /*
      * Step 2: Initialization
@@ -547,26 +568,7 @@ int main(int argc, char **argv)
     WRITE_READ(ftdi,
         DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), SEND_IMMEDIATE),
         DITEM( INT16(0x458a) ));
-
-    printf("Starting to send file '%s'\n", argv[1]);
-    int size;
-    int inputfd = open(argv[1], O_RDONLY);
-    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
-    uint8_t *headerp =
-         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
-    int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
-    do {
-        static uint8_t filebuffer[FILE_READSIZE];
-        size = read(inputfd, filebuffer, FILE_READSIZE);
-        if (size < FILE_READSIZE)
-            tailp = DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE);
-        for (i = 0; i < size; i++)
-            filebuffer[i] = bitswap[filebuffer[i]];
-        send_data_frame(ftdi, 0, (uint8_t *[]){headerp, NULL}, tailp, filebuffer, size, limit_len, NULL);
-        headerp = DITEM(PAUSE_TO_SHIFT);
-        limit_len = MAX_SINGLE_USB_DATA;
-    } while(size == FILE_READSIZE);
-    printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
+    send_data_file(ftdi, argv[1]);
 
     /*
      * Step 8: Startup
