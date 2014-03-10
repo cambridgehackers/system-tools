@@ -363,13 +363,12 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 
 static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
 {
-#define DATA_ITEM(...) 
-uint8_t *di1 = DITEM(
-     EXTENDED_COMMAND(0, IRREG_BYPASS),
-     EXTENDED_COMMAND(0, IRREG_USER2),
-     IDLE_TO_SHIFT_DR);
-     //__VA_ARGS__   /* in Shift-DR */
-uint8_t *di2 = DITEM(COMMAND_ENDING);
+    uint8_t *di1 = DITEM( EXTENDED_COMMAND(0, IRREG_BYPASS),
+                                 EXTENDED_COMMAND(0, IRREG_USER2),
+                                 IDLE_TO_SHIFT_DR);
+    uint8_t *di2 = DITEM(COMMAND_ENDING);
+    uint8_t *datac = DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR);
+    uint8_t *dbyte = DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, );
     static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
     static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
     int i;
@@ -381,27 +380,15 @@ uint8_t *di2 = DITEM(COMMAND_ENDING);
         DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
         patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUE, PATTERN1, 0x00));
     while (j-- > 0) {
-        WRITE_READ(ftdi, 
-            catlist((uint8_t *[]){
-                di1,
-                di2,
-                NULL}),
-            readdata_five_zeros);
-        WRITE_READ(ftdi, 
-            catlist((uint8_t *[]){
-                di1,
-                DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
-                di2,
-                NULL}),
-            readdata_five_zeros);
-        for (i = 0; i < 2; i++)
-            WRITE_READ(ftdi, 
-                catlist((uint8_t *[]){di1,
-                    DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR),
-                    DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
-                    di2,
-                    NULL}),
-                readdata_five_zeros);
+        uint8_t *alist[5] = {di1, di2, NULL, NULL, NULL};
+        for (i = 0; i < 4; i++) {
+           WRITE_READ(ftdi, catlist(alist), readdata_five_zeros);
+           if (i <= 1) {
+               alist[3] = alist[2];
+               alist[2] = alist[1];
+               alist[1] = (i == 0) ? dbyte: datac;
+           }
+        }
     }
 }
 
@@ -503,7 +490,7 @@ int main(int argc, char **argv)
     int k = 2;
     while (k-- > 0)
         check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
-    
+
     WRITE_READ(ftdi,
        DITEM(IDLE_TO_RESET, IN_RESET_STATE),
        NULL);
