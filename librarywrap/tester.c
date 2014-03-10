@@ -363,12 +363,9 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 
 static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
 {
-    uint8_t *di1 = DITEM( EXTENDED_COMMAND(0, IRREG_BYPASS),
-                                 EXTENDED_COMMAND(0, IRREG_USER2),
-                                 IDLE_TO_SHIFT_DR);
-    uint8_t *di2 = DITEM(COMMAND_ENDING);
-    uint8_t *datac = DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR);
-    uint8_t *dbyte = DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, );
+    uint8_t *added_item[] = {
+        DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
+        DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
     static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
     static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
     int i;
@@ -380,13 +377,18 @@ static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
         DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
         patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUE, PATTERN1, 0x00));
     while (j-- > 0) {
-        uint8_t *alist[5] = {di1, di2, NULL, NULL, NULL};
+        uint8_t *alist[5] = {
+            DITEM( EXTENDED_COMMAND(0, IRREG_BYPASS),
+                   EXTENDED_COMMAND(0, IRREG_USER2),
+                   IDLE_TO_SHIFT_DR),
+            DITEM(COMMAND_ENDING),
+            NULL, NULL, NULL};
         for (i = 0; i < 4; i++) {
            WRITE_READ(ftdi, catlist(alist), readdata_five_zeros);
            if (i <= 1) {
                alist[3] = alist[2];
                alist[2] = alist[1];
-               alist[1] = (i == 0) ? dbyte: datac;
+               alist[1] = added_item[i];
            }
         }
     }
