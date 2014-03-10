@@ -402,32 +402,26 @@ static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
 
 static uint8_t bitswap[256];
 
-static void read_status(struct ftdi_context *ftdi, int instance)
+static void read_status(struct ftdi_context *ftdi, uint8_t *extra)
 {
-uint8_t **data;
 int i;
-
-//#define READ_STAT_REG1(...)          
-uint8_t *stat1 =
-     DITEM(IDLE_TO_RESET);
-     //__VA_ARGS__                     
 uint8_t *stat2 =
      DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
+uint8_t *stat3 = NULL;
 
 static uint8_t request_data[] = {
      SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
      SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0)};
 
-    if (!instance)
-        data = (uint8_t *[]){stat1,
+    if (extra) {
+        stat3 = stat2;
+        stat2 = extra;
+    }
+    uint8_t *lastp = send_data_frame(ftdi, 0,
+        (uint8_t *[]){DITEM(IDLE_TO_RESET),
             stat2,
-            NULL};
-    else
-        data = (uint8_t *[]){stat1,
-            DITEM(IN_RESET_STATE, RESET_TO_RESET),
-            stat2,
-            NULL};
-    uint8_t *lastp = send_data_frame(ftdi, 0, data,
+            stat3,
+            NULL},
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
             EXTENDED_COMMAND(0, IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
@@ -534,7 +528,7 @@ int main(int argc, char **argv)
         WRITE_READ(ftdi,
             DITEM( EXTENDED_COMMAND(DREAD, IRREG_BYPASS), SEND_IMMEDIATE ),
             DITEM( INT16(0xf5af) ));
-    read_status(ftdi, 0);
+    read_status(ftdi, NULL);
     check_idcode(ftdi, 3, DITEM( RESET_TO_RESET));
     k = 3;
     while (k-- > 0)
@@ -609,7 +603,7 @@ int main(int argc, char **argv)
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
     check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
-    read_status(ftdi, 1);
+    read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET));
     ftdi_deinit(ftdi);
     return 0;
 }
