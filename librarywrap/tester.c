@@ -393,31 +393,20 @@ static void test_pattern(struct ftdi_context *ftdi)
           readdata_five_zeros);
 }
 
-#define IDTEST_PATTERN1                 \
-     TMS_RESET_WEIRD, /* Reset????? */  \
-     RESET_TO_SHIFT_DR
-
-static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
-static uint8_t pat3[] = DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE);
-static uint8_t readdata3z[] = DITEM( IDCODE_VALUE, PATTERN1, 0x00);
-static void test_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
-{
-    send_data_frame(ftdi, DREAD,
-        catlist((uint8_t *[]){statep, DITEM( IDTEST_PATTERN1), NULL}),
-        pat3, patdata, sizeof(patdata), 9999, readdata3z);
-    while (j-- > 0)
-        test_pattern(ftdi);
-}
-
 static void check_idcode(struct ftdi_context *ftdi, int j, int k, uint8_t *statep)
 {
+static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
     send_data_frame(ftdi, DREAD,
-        catlist((uint8_t *[]){statep, DITEM( IDTEST_PATTERN1), NULL}),
-        pat3, patdata, sizeof(patdata), 9999, readdata3z);
+        catlist((uint8_t *[]){statep,
+                              DITEM(TMS_RESET_WEIRD, /* Reset????? */
+                                    RESET_TO_SHIFT_DR),
+                              NULL}),
+        DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
+        patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUE, PATTERN1, 0x00));
     while (j-- > 0)
         test_pattern(ftdi);
     while (k-- > 0)
-        test_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+        check_idcode(ftdi, 3, 0, DITEM( IDLE_TO_RESET));
 }
 
 static void read_status(struct ftdi_context *ftdi, int instance)
@@ -610,7 +599,7 @@ int main(int argc, char **argv)
               EXTENDED_COMMAND(DREAD, IRREG_BYPASS),
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
-    test_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, 3, 0, DITEM( IDLE_TO_RESET));
     read_status(ftdi, 1);
     ftdi_deinit(ftdi);
     return 0;
