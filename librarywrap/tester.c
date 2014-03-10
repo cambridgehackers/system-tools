@@ -277,10 +277,6 @@ static uint8_t *pulse_gpio(int delay)
 static struct ftdi_transfer_control* writetc;
 static uint8_t bitswap[256];
 
-#define WRITE_READ(FTDI, A, B) \
-    data_submit(FTDI, 0, (A)+1, (A)[0]); \
-    check_ftdi_read_data_submit(FTDI, B);
-
 static void data_submit(struct ftdi_context *ftdi, int wait, uint8_t *buf, int size)
 {
     writetc = ftdi_write_data_submit(ftdi, buf, size);
@@ -304,6 +300,12 @@ static uint8_t *check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *
         memdump(last_read_data, buf[0], "ACTUAL");
     }
     return last_read_data;
+}
+
+static void WRITE_READ(struct ftdi_context *ftdi, uint8_t *req, uint8_t *resp)
+{
+    data_submit(ftdi, 0, req+1, req[0]);
+    check_ftdi_read_data_submit(ftdi, resp);
 }
 
 static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *header,
@@ -368,7 +370,7 @@ static void test_pattern(struct ftdi_context *ftdi)
                     DATAW(1), 0x69,
                     DATAWBIT, 0x01, 0x00, ),
          readdata_five_zeros);
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < 2; i++)
         WRITE_READ(ftdi, DATA_ITEM(
                     DATAWBIT, 0x04, 0x0c,
                     SHIFT_TO_UPDATE_TO_IDLE(0, 0),
@@ -376,7 +378,6 @@ static void test_pattern(struct ftdi_context *ftdi)
                     DATAW(1), 0x69,
                     DATAWBIT, 0x01, 0x00, ),
           readdata_five_zeros);
-    }
 }
 
 #define IDTEST_PATTERN1                 \
@@ -546,10 +547,9 @@ int main(int argc, char **argv)
          EXTENDED_COMMAND(0, IRREG_USERCODE),
          IDLE_TO_SHIFT_DR,
          COMMAND_ENDING), DITEM( 0xff, INT32(0xffffffff) ));
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 3; i++)
         WRITE_READ(ftdi, DITEM( EXTENDED_COMMAND(DREAD, IRREG_BYPASS), SEND_IMMEDIATE ),
             DITEM( INT16(0xf5af) ));
-    }
     read_status(ftdi, 0);
     check_idcode(ftdi, 1);
 
@@ -562,8 +562,7 @@ int main(int argc, char **argv)
              JTAG_IRREG(0, IRREG_ISC_NOOP, EXIT1_TO_IDLE)),
          pulse_gpio(15000000/80) /* 12.5 msec */,
          DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP, SEND_IMMEDIATE) ), 0};
-    uint8_t *p = catlist(alist);
-    WRITE_READ(ftdi, p, DITEM( INT16(0x4488) ));
+    WRITE_READ(ftdi, catlist(alist), DITEM( INT16(0x4488) ));
 
     /*
      * Step 6: Load Configuration Data Frames
@@ -572,24 +571,23 @@ int main(int argc, char **argv)
         DITEM( INT16(0x458a) ));
 
     printf("Starting to send file '%s'\n", argv[1]);
+    int size;
     int inputfd = open(argv[1], O_RDONLY);
+    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
     uint8_t *headerp =
          DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
     int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
-    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
-    int last = 0;
-    while (!last) {
+    do {
         static uint8_t filebuffer[FILE_READSIZE];
-        int size = read(inputfd, filebuffer, FILE_READSIZE);
-        last = (size < FILE_READSIZE);
-        if (last)
+        size = read(inputfd, filebuffer, FILE_READSIZE);
+        if (size < FILE_READSIZE)
             tailp = DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE);
         for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
         send_data_frame(ftdi, 0, headerp, tailp, filebuffer, size, limit_len, NULL);
-        limit_len = MAX_SINGLE_USB_DATA;
         headerp = DITEM(PAUSE_TO_SHIFT);
-    }
+        limit_len = MAX_SINGLE_USB_DATA;
+    } while(size == FILE_READSIZE);
     printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
 
     /*
