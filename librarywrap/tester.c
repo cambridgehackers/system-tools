@@ -458,7 +458,7 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
               DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
               DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
               DATAW(4), SWAP32(SMAP_CMD_DESYNC),
-              DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), 0}),
+              DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), NULL}),
      DITEM(SHIFT_TO_EXIT1(0, 0),
            EXIT1_TO_IDLE,
            JTAG_IRREG(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
@@ -538,7 +538,7 @@ int main(int argc, char **argv)
                JTAG_IRREG(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
                JTAG_IRREG(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
          pulse_gpio(15000000/80) /* 12.5 msec */,
-         DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE), 0}),
+         DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE), NULL}),
        DITEM( INT16(0x4488) ));
 
     /*
