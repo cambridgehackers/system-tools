@@ -200,10 +200,10 @@ struct ftdi_context *init_ftdi(void)
 #define SHIFT_TO_PAUSE       TMSW, 0x01, 0x01 /* Shift-DR -> Pause-DR */
 #define TMS_RESET_WEIRD      TMSW, 0x04, 0x7f /* Reset????? */
 
-#define JTAG_IRREG(READA, A, B)                             \
+#define JTAG_IRREG(READA, A)                             \
      IDLE_TO_SHIFT_IR,                            \
      DATAWBIT | (READA), 0x04, M(A),                        \
-     SHIFT_TO_EXIT1((READA), ((A) & 0x100)>>1), B
+     SHIFT_TO_EXIT1((READA), ((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND(READA, A)                       \
      IDLE_TO_SHIFT_IR,                            \
@@ -334,7 +334,7 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
             *readptr++ = 0x06;
             *readptr++ = ch;        // 7 bits of data here
             memcpy(readptr, tail+1, tail[0]);
-            *readptr |= read_param; // insert 1 bit of data here
+            *readptr |= read_param; // this is a TMS instruction to shift state
             *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
             readptr += tail[0];
         }
@@ -463,28 +463,27 @@ static uint8_t *catlist(uint8_t *arg[])
 }
 static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
 {
-    uint8_t temp[] = {4, SWAP32(data)};
-    static uint8_t request_data[] = {INT32(4)};
     uint8_t *alist[] = {prefix,
         DITEM(
-            JTAG_IRREG(0, IRREG_CFG_IN, EXIT1_TO_IDLE),
+            JTAG_IRREG(0, IRREG_CFG_IN), EXIT1_TO_IDLE,
             IDLE_TO_SHIFT_DR,
             DATAW(4), SWAP32(SMAP_DUMMY),
             DATAW(4), SWAP32(SMAP_SYNC),
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
             DATAW(4)),
-        temp,
+        (uint8_t []){4, SWAP32(data)},
         DITEM(
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
             DATAW(4), SWAP32(SMAP_CMD_DESYNC),
             DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), 0};
+    static uint8_t request_data[] = {INT32(4)};
 
     send_data_frame(ftdi, 0, catlist(alist), DITEM(
          SHIFT_TO_EXIT1(0, 0),
          EXIT1_TO_IDLE,
-         JTAG_IRREG(0, IRREG_CFG_OUT, EXIT1_TO_IDLE),
+         JTAG_IRREG(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
          IDLE_TO_SHIFT_DR,
          DATARW(3), 0x00, 0x00, 0x00,
          DATARWBIT, 0x06, 0x00,
@@ -558,16 +557,16 @@ int main(int argc, char **argv)
      */
     uint8_t *alist[] = {DITEM(
              IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-             JTAG_IRREG(0, IRREG_JPROGRAM, EXIT1_TO_IDLE),
-             JTAG_IRREG(0, IRREG_ISC_NOOP, EXIT1_TO_IDLE)),
+             JTAG_IRREG(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
+             JTAG_IRREG(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
          pulse_gpio(15000000/80) /* 12.5 msec */,
-         DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP, SEND_IMMEDIATE) ), 0};
+         DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE), 0};
     WRITE_READ(ftdi, catlist(alist), DITEM( INT16(0x4488) ));
 
     /*
      * Step 6: Load Configuration Data Frames
      */
-    WRITE_READ(ftdi, DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN, SEND_IMMEDIATE) ),
+    WRITE_READ(ftdi, DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), SEND_IMMEDIATE),
         DITEM( INT16(0x458a) ));
 
     printf("Starting to send file '%s'\n", argv[1]);
@@ -599,22 +598,23 @@ int main(int argc, char **argv)
 
     WRITE_READ(ftdi, DITEM(
          EXIT1_TO_IDLE,
-         JTAG_IRREG(0, IRREG_BYPASS, EXIT1_TO_IDLE),
-         JTAG_IRREG(0, IRREG_JSTART, EXIT1_TO_IDLE),
+         JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE,
+         JTAG_IRREG(0, IRREG_JSTART), EXIT1_TO_IDLE,
          TMSW_DELAY,
-         JTAG_IRREG(DREAD, IRREG_BYPASS, SEND_IMMEDIATE)), DITEM( INT16(0xd6ac) ));
+         JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE), DITEM( INT16(0xd6ac) ));
 
     send_smap(ftdi, DITEM( EXIT1_TO_IDLE ),
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1),
          DITEM( 0x02, SWAP32B(0xfcfe7910) ));
 
-    static uint8_t item20z[] = { EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS, EXIT1_TO_IDLE) };
+    static uint8_t item20z[] = { EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE };
     data_submit(ftdi, 1, item20z, sizeof(item20z));
 
-    WRITE_READ(ftdi, DITEM(
-         IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-         EXTENDED_COMMAND(DREAD, IRREG_BYPASS),
-         SEND_IMMEDIATE), DITEM( INT16(0xf5a9) ));
+    WRITE_READ(ftdi,
+        DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
+              EXTENDED_COMMAND(DREAD, IRREG_BYPASS),
+              SEND_IMMEDIATE),
+        DITEM( INT16(0xf5a9) ));
     test_idcode(ftdi);
     read_status(ftdi, 1);
     ftdi_deinit(ftdi);
