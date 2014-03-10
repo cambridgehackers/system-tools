@@ -198,6 +198,7 @@ struct ftdi_context *init_ftdi(void)
 #define PAUSE_TO_SHIFT       TMSW, 0x01, 0x01 /* Pause-DR -> Shift-DR */
 #define SHIFT_TO_PAUSE       TMSW, 0x01, 0x01 /* Shift-DR -> Pause-DR */
 #define TMS_RESET_WEIRD      TMSW, 0x04, 0x7f /* Reset????? */
+#define EXTEND_EXTRA 0xc0
 
 #define JTAG_IRREG(READA, A)                             \
      IDLE_TO_SHIFT_IR,                            \
@@ -206,7 +207,7 @@ struct ftdi_context *init_ftdi(void)
 
 #define EXTENDED_COMMAND(READA, A)                       \
      IDLE_TO_SHIFT_IR,                            \
-     DATAWBIT | (READA), 0x04, 0xc0 | M(A),                 \
+     DATAWBIT | (READA), 0x04, M(A),                 \
      SHIFT_TO_UPDATE_TO_IDLE((READA), ((A) & 0x100)>>1)
 
 #define PATTERN1 \
@@ -402,8 +403,8 @@ static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
         patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUE, PATTERN1, 0x00));
     while (j-- > 0) {
         uint8_t *alist[5] = {
-            DITEM( EXTENDED_COMMAND(0, IRREG_BYPASS),
-                   EXTENDED_COMMAND(0, IRREG_USER2),
+            DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
+                   EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USER2),
                    IDLE_TO_SHIFT_DR),
             DITEM(COMMAND_ENDING),
             NULL, NULL, NULL};
@@ -418,7 +419,7 @@ static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
     }
 }
 
-static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
+static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3)
 {
     int i;
@@ -433,7 +434,7 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
     uint8_t *lastp = send_data_frame(ftdi, 0,
         (uint8_t *[]){DITEM(IDLE_TO_RESET), stat2, stat3, NULL},
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-            EXTENDED_COMMAND(0, IRREG_CFG_OUT),
+            EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
         request_data, sizeof(request_data), 9999, DITEM( 2, SWAP32B(0xf0fe7910) ));
@@ -448,28 +449,28 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
 {
     static uint8_t request_data[] = {INT32(4)};
 
-    send_data_frame(ftdi, 0, (uint8_t *[]){
-        prefix,
-        DITEM(JTAG_IRREG(0, IRREG_CFG_IN), EXIT1_TO_IDLE,
+    send_data_frame(ftdi, 0,
+        (uint8_t *[]){prefix,
+                      DITEM(JTAG_IRREG(0, IRREG_CFG_IN), EXIT1_TO_IDLE,
+                        IDLE_TO_SHIFT_DR,
+                        DATAW(4), SWAP32(SMAP_DUMMY),
+                        DATAW(4), SWAP32(SMAP_SYNC),
+                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                        DATAW(4)),
+                      (uint8_t []){4, SWAP32(data)},
+                      DITEM(DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
+                        DATAW(4), SWAP32(SMAP_CMD_DESYNC),
+                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), NULL},
+        DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE,
+              JTAG_IRREG(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
               IDLE_TO_SHIFT_DR,
-              DATAW(4), SWAP32(SMAP_DUMMY),
-              DATAW(4), SWAP32(SMAP_SYNC),
-              DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-              DATAW(4)),
-        (uint8_t []){4, SWAP32(data)},
-        DITEM(DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-              DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-              DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
-              DATAW(4), SWAP32(SMAP_CMD_DESYNC),
-              DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), NULL},
-     DITEM(SHIFT_TO_EXIT1(0, 0),
-           EXIT1_TO_IDLE,
-           JTAG_IRREG(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
-           IDLE_TO_SHIFT_DR,
-           DATARW(3), 0x00, 0x00, 0x00,
-           DATARWBIT, 0x06, 0x00,
-           SHIFT_TO_EXIT1(DREAD, 0),
-           SEND_IMMEDIATE ), request_data, sizeof(request_data), 9999, rdata);
+              DATARW(3), 0x00, 0x00, 0x00,
+              DATARWBIT, 0x06, 0x00,
+              SHIFT_TO_EXIT1(DREAD, 0),
+              SEND_IMMEDIATE ),
+        request_data, sizeof(request_data), 9999, rdata);
 }
 
 int main(int argc, char **argv)
@@ -523,13 +524,13 @@ int main(int argc, char **argv)
 
     WRITE_READ(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-            EXTENDED_COMMAND(0, IRREG_USERCODE),
+            EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USERCODE),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
         DITEM( 0xff, INT32(0xffffffff) ));
     for (i = 0; i < 3; i++)
         WRITE_READ(ftdi,
-            DITEM( EXTENDED_COMMAND(DREAD, IRREG_BYPASS), SEND_IMMEDIATE ),
+            DITEM( EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS), SEND_IMMEDIATE ),
             DITEM( INT16(0xf5af) ));
     read_status(ftdi, cfg_in_command, NULL);
     check_idcode(ftdi, 3, DITEM( RESET_TO_RESET));
@@ -583,7 +584,7 @@ int main(int argc, char **argv)
     WRITE_READ(ftdi, DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE), NULL);
     WRITE_READ(ftdi,
         DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-              EXTENDED_COMMAND(DREAD, IRREG_BYPASS),
+              EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
     check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
