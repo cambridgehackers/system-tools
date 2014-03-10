@@ -128,8 +128,6 @@ struct ftdi_context *init_ftdi(void)
 
 #define IDCODE_VALUE INT32(IDCODE_VERSION | IDCODE_XC7K325T)
 
-#define SET_CLOCK_DIVISOR    0x86, INT16(1)   // 15MHz (since disable clk divide by 5)
-
 #define IRREG_USER2          0x003
 #define IRREG_CFG_OUT        0x004
 #define IRREG_CFG_IN         0x005
@@ -488,6 +486,8 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+#define CLOCK_FREQUENCY      15000000
+#define SET_CLOCK_DIVISOR    0x86, INT16(30000000/CLOCK_FREQUENCY - 1)
     /*
      * Initialize FTDI chip and GPIO pins
      */
@@ -552,7 +552,7 @@ int main(int argc, char **argv)
             DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
                JTAG_IRREG(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
                JTAG_IRREG(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
-            pulse_gpio(15000000/80) /* 12.5 msec */,
+            pulse_gpio(CLOCK_FREQUENCY/80) /* 12.5 msec */,
             DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE),
             NULL}),
        DITEM( INT16(0x4488) ));
@@ -569,7 +569,7 @@ int main(int argc, char **argv)
      * Step 8: Startup
      */
     send_smap(ftdi,
-        pulse_gpio(15000000/800),  // 1.25 msec
+        pulse_gpio(CLOCK_FREQUENCY/800),  // 1.25 msec
         SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1),
         DITEM( 0, SWAP32B(0x1000000) ));
 
