@@ -404,25 +404,30 @@ static uint8_t bitswap[256];
 
 static void read_status(struct ftdi_context *ftdi, int instance)
 {
-uint8_t *data;
+uint8_t **data;
 int i;
 
-#define READ_STAT_REG1(...)          \
-     IDLE_TO_RESET,                  \
-     __VA_ARGS__                     \
-     RESET_TO_IDLE,                  \
-     EXTENDED_COMMAND(0, IRREG_CFG_IN), \
-     IDLE_TO_SHIFT_DR
+//#define READ_STAT_REG1(...)          
+uint8_t *stat1 =
+     DITEM(IDLE_TO_RESET);
+     //__VA_ARGS__                     
+uint8_t *stat2 =
+     DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 
 static uint8_t request_data[] = {
      SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
      SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0)};
 
     if (!instance)
-        data = DITEM( READ_STAT_REG1() );
+        data = (uint8_t *[]){stat1,
+            stat2,
+            NULL};
     else
-        data = DITEM(READ_STAT_REG1(IN_RESET_STATE, RESET_TO_RESET, ));
-    uint8_t *lastp = send_data_frame(ftdi, 0, (uint8_t *[]){data, NULL},
+        data = (uint8_t *[]){stat1,
+            DITEM(IN_RESET_STATE, RESET_TO_RESET),
+            stat2,
+            NULL};
+    uint8_t *lastp = send_data_frame(ftdi, 0, data,
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
             EXTENDED_COMMAND(0, IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
@@ -511,12 +516,9 @@ int main(int argc, char **argv)
      */
     static uint8_t iddata[] = {INT32(0xffffffff),  PATTERN2};
     send_data_frame(ftdi, DREAD,
-        (uint8_t *[]){DITEM(RESET_TO_RESET,
-             IN_RESET_STATE,
-             RESET_TO_RESET,
-             IN_RESET_STATE,
-             RESET_TO_IDLE,
-             IDLE_TO_SHIFT_DR), NULL},
+        (uint8_t *[]){DITEM(RESET_TO_RESET, IN_RESET_STATE,
+             RESET_TO_RESET, IN_RESET_STATE,
+             RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
 
