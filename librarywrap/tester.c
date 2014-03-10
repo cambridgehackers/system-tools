@@ -424,7 +424,6 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
     }
 }
 
-static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3)
 {
     int i;
@@ -478,6 +477,7 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
         request_data, sizeof(request_data), 9999, rdata);
 }
 
+static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 int main(int argc, char **argv)
 {
     struct ftdi_context *ftdi;
@@ -536,7 +536,8 @@ int main(int argc, char **argv)
     for (i = 0; i < 3; i++)
         WRITE_READ(ftdi,
             DITEM( EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS), SEND_IMMEDIATE ),
-            DITEM( INT16(0xf5af) ));
+            DITEM( INT16(0x1188) ));
+            //DITEM( INT16(0xf5af) )); // when already programmed
     read_status(ftdi, cfg_in_command, NULL);
     bypass_test(ftdi, DITEM( RESET_TO_RESET));
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
