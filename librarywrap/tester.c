@@ -287,26 +287,18 @@ static uint8_t *pulse_gpio(int delay)
     return prebuffer;
 }
 
-static struct ftdi_transfer_control* writetc;
-static uint8_t bitswap[256];
-
-static void data_submit(struct ftdi_context *ftdi, int wait, uint8_t *buf, int size)
+static void data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
 {
-    writetc = ftdi_write_data_submit(ftdi, buf, size);
-    if (wait) {
-        ftdi_transfer_data_done(writetc);
-        writetc = NULL;
-    }
+    struct ftdi_transfer_control* writetc = ftdi_write_data_submit(ftdi, buf, size);
+    ftdi_transfer_data_done(writetc);
 }
+
 static uint8_t *check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf)
 {
     static uint8_t last_read_data[10000];
     struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, buf[0]);
-
-    if (writetc)
-        ftdi_transfer_data_done(writetc);
-    writetc = NULL;
     ftdi_transfer_data_done(tc);
+
     if (memcmp(buf+1, last_read_data, buf[0])) {
         printf("[%s:%d]\n", __FUNCTION__, __LINE__);
         memdump(buf+1, buf[0], "EXPECT");
@@ -317,8 +309,9 @@ static uint8_t *check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *
 
 static void WRITE_READ(struct ftdi_context *ftdi, uint8_t *req, uint8_t *resp)
 {
-    data_submit(ftdi, 0, req+1, req[0]);
-    check_ftdi_read_data_submit(ftdi, resp);
+    data_submit(ftdi, req+1, req[0]);
+    if (resp)
+        check_ftdi_read_data_submit(ftdi, resp);
 }
 
 static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *header,
@@ -351,7 +344,7 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
             *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
             readptr += tail[0];
         }
-        data_submit(ftdi, 1, packetbuffer, readptr - packetbuffer);
+        data_submit(ftdi, packetbuffer, readptr - packetbuffer);
         size -= limit_len+1;
         readptr = packetbuffer;
     }
@@ -409,6 +402,8 @@ static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
         check_idcode(ftdi, 3, 0, DITEM( IDLE_TO_RESET));
 }
 
+static uint8_t bitswap[256];
+
 static void read_status(struct ftdi_context *ftdi, int instance)
 {
 uint8_t *data;
@@ -443,8 +438,7 @@ static uint8_t request_data[] = {
         status.c[i] = bitswap[lastp[i+1]];
     printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
         status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
-    static uint8_t itor[] = { IDLE_TO_RESET };
-    data_submit(ftdi, 1, itor, sizeof(itor));
+    WRITE_READ(ftdi, DITEM( IDLE_TO_RESET ), NULL);
 }
 
 static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
@@ -504,8 +498,8 @@ int main(int argc, char **argv)
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = BSWAP(i);
     check_idcode(ftdi, 0, 2, DITEM( RESET_TO_RESET));
-    static uint8_t item8z[] = { IDLE_TO_RESET, IN_RESET_STATE};
-    data_submit(ftdi, 1, item8z, sizeof(item8z));
+    
+    WRITE_READ(ftdi, DITEM(IDLE_TO_RESET, IN_RESET_STATE), NULL);
     static uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
     ftdi_write_data(ftdi, command_set_divisor, sizeof(command_set_divisor));
 
@@ -591,8 +585,8 @@ int main(int argc, char **argv)
          SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1),
          DITEM( 0x02, SWAP32B(0xfcfe7910) ));
 
-    static uint8_t item20z[] = { EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE };
-    data_submit(ftdi, 1, item20z, sizeof(item20z));
+    
+    WRITE_READ(ftdi, DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE), NULL);
 
     WRITE_READ(ftdi,
         DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
