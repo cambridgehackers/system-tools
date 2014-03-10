@@ -181,14 +181,10 @@ struct ftdi_context *init_ftdi(void)
 #define IDLE_TO_RESET      TMSW, 0x02, 0x07  /* Idle -> Reset */
 #define RESET_TO_IDLE      TMSW, 0x00, 0x00  /* Reset -> Idle */
 #define IN_RESET_STATE     TMSW, 0x00, 0x7f  /* Marker for Reset */
-#define SHIFT_TO_EXIT1(A) \
-     TMSW, 0x00, ((A) | 0x01)             /* Shift-IR -> Exit1-IR */
-#define SHIFT_TO_EXIT1_RW(A) \
-     TMSRW, 0x00, ((A) | 0x01)            /* Shift-IR -> Exit1-IR */
-#define SHIFT_TO_UPDATE_TO_IDLE(A) \
-     TMSW, 0x02, ((A) | 0x03)    /* Shift-DR -> Update-DR -> Idle */
-#define SHIFT_TO_UPDATE_TO_IDLE_RW(A) \
-     TMSRW, 0x02, ((A) | 0x03)   /* Shift-DR -> Update-DR -> Idle */
+#define SHIFT_TO_EXIT1(READA, A) \
+     TMSW | (READA), 0x00, ((A) | 0x01)             /* Shift-IR -> Exit1-IR */
+#define SHIFT_TO_UPDATE_TO_IDLE(READA, A) \
+     TMSW | (READA), 0x02, ((A) | 0x03)    /* Shift-DR -> Update-DR -> Idle */
 #define FORCE_RETURN_TO_RESET TMSW, 0x04, 0x1f /* go back to TMS reset state */
 #define RESET_TO_SHIFT_DR     TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
 #define RESET_TO_RESET        TMSW, 0x00, 0x01
@@ -201,31 +197,30 @@ struct ftdi_context *init_ftdi(void)
          TMSW, 0x06, 0x00, TMSW, 0x06, 0x00,                   \
          TMSW, 0x01, 0x00
 #define PAUSE_TO_SHIFT       TMSW, 0x01, 0x01 /* Pause-DR -> Shift-DR */
-#define PAUSE_TO_SHIFT_RW    TMSRW, 0x01, 0x01
 #define SHIFT_TO_PAUSE       TMSW, 0x01, 0x01 /* Shift-DR -> Pause-DR */
 #define TMS_RESET_WEIRD      TMSW, 0x04, 0x7f /* Reset????? */
 
 #define JTAG_IRREG(A)                             \
      IDLE_TO_SHIFT_IR,                            \
      DATAWBIT, 0x04, M(A),                        \
-     SHIFT_TO_EXIT1(((A) & 0x100)>>1),            \
+     SHIFT_TO_EXIT1(0, ((A) & 0x100)>>1),            \
      EXIT1_TO_IDLE
 
 #define JTAG_IRREG_RW(A)                          \
      IDLE_TO_SHIFT_IR,                            \
      DATARWBIT, 0x04, M(A),                       \
-     SHIFT_TO_EXIT1_RW(((A) & 0x100)>>1),         \
+     SHIFT_TO_EXIT1(DREAD, ((A) & 0x100)>>1),         \
      SEND_IMMEDIATE
 
 #define EXTENDED_COMMAND(A)                       \
      IDLE_TO_SHIFT_IR,                            \
      DATAWBIT, 0x04, M(0xc0 | (A)),               \
-     SHIFT_TO_UPDATE_TO_IDLE(((A) & 0x100)>>1)
+     SHIFT_TO_UPDATE_TO_IDLE(0, ((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND_RW(A)                    \
      IDLE_TO_SHIFT_IR,                            \
      DATARWBIT, 0x04, M(0xc0 | (A)),              \
-     SHIFT_TO_UPDATE_TO_IDLE_RW(((A) & 0x100)>>1)
+     SHIFT_TO_UPDATE_TO_IDLE(DREAD, ((A) & 0x100)>>1)
 
 #define PATTERN1 \
          INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
@@ -323,7 +318,7 @@ static uint8_t *check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *
     return last_read_data;
 }
 
-static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t *header,
+static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *header,
     uint8_t *tail, uint8_t *ptrin, int size, int limit_len, uint8_t *checkdata)
 {
     int i;
@@ -338,17 +333,18 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t
             rlen = limit_len;
         if (rlen < limit_len)
             rlen--;                   // last byte is actually loaded with DATAW command
-        *readptr++ = DWRITE | read;
+        *readptr++ = DWRITE | read_param;
         *readptr++ = rlen;
         *readptr++ = rlen >> 8;
         for (i = 0; i <= rlen; i++)
             *readptr++ = *ptrin++;
         if (rlen < limit_len) {
             uint8_t ch = *ptrin++;
-            *readptr++ = DATAWBIT | read;
+            *readptr++ = DATAWBIT | read_param;
             *readptr++ = 0x06;
             *readptr++ = ch;        // 7 bits of data here
             memcpy(readptr, tail+1, tail[0]);
+            *readptr |= read_param; // insert 1 bit of data here
             *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
             readptr += tail[0];
         }
@@ -364,7 +360,7 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read, uint8_t
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
      DATAR(3),                                              \
      DATARBIT, 0x06,                                        \
-     SHIFT_TO_UPDATE_TO_IDLE_RW(0),                         \
+     SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0),                     \
      SEND_IMMEDIATE
 
 static void test_pattern(struct ftdi_context *ftdi)
@@ -387,7 +383,7 @@ static void test_pattern(struct ftdi_context *ftdi)
     for (i = 0; i < 2; i++) {
         WRITE_READ(ftdi, DATA_ITEM(
                     DATAWBIT, 0x04, 0x0c,
-                    SHIFT_TO_UPDATE_TO_IDLE(0),
+                    SHIFT_TO_UPDATE_TO_IDLE(0, 0),
                     IDLE_TO_SHIFT_DR,
                     DATAW(1), 0x69,
                     DATAWBIT, 0x01, 0x00, ),
@@ -400,7 +396,7 @@ static void test_pattern(struct ftdi_context *ftdi)
      RESET_TO_SHIFT_DR
 
 static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
-static uint8_t pat3[] = DITEM( SHIFT_TO_UPDATE_TO_IDLE_RW(0), SEND_IMMEDIATE);
+static uint8_t pat3[] = DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE);
 static uint8_t readdata3z[] = DITEM( IDCODE_VALUE, PATTERN1, 0x00);
 static void test_idcode(struct ftdi_context *ftdi)
 {
@@ -447,7 +443,7 @@ static uint8_t request_data[] = {
     else
         data = DITEM(READ_STAT_REG1(IN_RESET_STATE, RESET_TO_RESET, ));
     uint8_t *lastp = send_data_frame(ftdi, 0, data,
-        DITEM(SHIFT_TO_UPDATE_TO_IDLE(0),
+        DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
             EXTENDED_COMMAND(IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
@@ -498,13 +494,13 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
     uint8_t *p = catlist(alist);
 
     send_data_frame(ftdi, 0, p, DITEM(
-         SHIFT_TO_EXIT1(0),
+         SHIFT_TO_EXIT1(0, 0),
          EXIT1_TO_IDLE,
          JTAG_IRREG(IRREG_CFG_OUT),
          IDLE_TO_SHIFT_DR,
          DATARW(3), 0x00, 0x00, 0x00,
          DATARWBIT, 0x06, 0x00,
-         SHIFT_TO_EXIT1_RW(0),
+         SHIFT_TO_EXIT1(DREAD, 0),
          SEND_IMMEDIATE ), request_data, sizeof(request_data), 9999, rdata);
 }
 
@@ -553,7 +549,7 @@ int main(int argc, char **argv)
              IN_RESET_STATE,
              RESET_TO_IDLE,
              IDLE_TO_SHIFT_DR),
-        DITEM(PAUSE_TO_SHIFT_RW, SEND_IMMEDIATE),
+        DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
 
     WRITE_READ(ftdi, DITEM(
@@ -601,7 +597,7 @@ int main(int argc, char **argv)
         int size = read(inputfd, filebuffer, FILE_READSIZE);
         last = (size < FILE_READSIZE);
         if (last)
-            tailp = DITEM(SHIFT_TO_EXIT1(0), EXIT1_TO_IDLE);
+            tailp = DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE);
         for (i = 0; i < size; i++)
             filebuffer[i] = bitswap[filebuffer[i]];
         send_data_frame(ftdi, 0, headerp, tailp, filebuffer, size, limit_len, NULL);
