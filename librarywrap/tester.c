@@ -386,14 +386,9 @@ static void send_data_file(struct ftdi_context *ftdi, const char *filename)
      SEND_IMMEDIATE
 
 
-static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
+static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep)
 {
-    uint8_t *added_item[] = {
-        DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
-        DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
     static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
-    static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
-    int i;
 
     send_data_frame(ftdi, DREAD,
         (uint8_t *[]){statep,
@@ -401,6 +396,16 @@ static void check_idcode(struct ftdi_context *ftdi, int j, uint8_t *statep)
                       NULL},
         DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
         patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUE, PATTERN1, 0x00));
+}
+
+static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
+{
+    uint8_t *added_item[] = {
+        DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
+        DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
+    static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
+    int i, j = 3;
+    check_idcode(ftdi, statep);
     while (j-- > 0) {
         uint8_t *alist[5] = {
             DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
@@ -504,9 +509,9 @@ int main(int argc, char **argv)
     /*
      * Step 5: Check Device ID
      */
-    check_idcode(ftdi, 0, DITEM( RESET_TO_RESET));
-    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
-    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, DITEM( RESET_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
 
     WRITE_READ(ftdi,
        DITEM(IDLE_TO_RESET, IN_RESET_STATE),
@@ -533,10 +538,10 @@ int main(int argc, char **argv)
             DITEM( EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS), SEND_IMMEDIATE ),
             DITEM( INT16(0xf5af) ));
     read_status(ftdi, cfg_in_command, NULL);
-    check_idcode(ftdi, 3, DITEM( RESET_TO_RESET));
-    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
-    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
-    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( RESET_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
 
     /*
      * Step 2: Initialization
@@ -587,7 +592,7 @@ int main(int argc, char **argv)
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
-    check_idcode(ftdi, 3, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
     ftdi_deinit(ftdi);
     return 0;
