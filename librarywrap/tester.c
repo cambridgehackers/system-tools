@@ -115,47 +115,6 @@ struct ftdi_context *init_ftdi(void)
 #define SWAP32B(A)         MS(A), MS((A) >> 8), MS((A) >> 16), MS((A) >> 24)
 
 /*
- * Xilinx constants
- */
-// IDCODE from bsd file
-#define IDCODE_XC7K325T  (  \
-     /*               XXXX  /  version */        \
-          (0b0011011 << 21) /* family */        \
-     |  (0b001010001 << 12) /* array size */    \
-     |(0b00001001001 <<  1) /* manufacturer */  \
-     |                   1) /* required by 1149.1 */
-#define IDCODE_VERSION     0x40000000
-
-#define IDCODE_VALUE  (IDCODE_VERSION | IDCODE_XC7K325T)
-#define IDCODE_VALUEB INT32(IDCODE_VALUE)
-
-#define IRREG_USER2          0x003
-#define IRREG_CFG_OUT        0x004
-#define IRREG_CFG_IN         0x005
-#define IRREG_USERCODE       0x008
-#define IRREG_JPROGRAM       0x00b
-#define IRREG_JSTART         0x00c
-#define IRREG_ISC_NOOP       0x014
-#define IRREG_BYPASS         0x13f
-
-#define SMAP_DUMMY           0xffffffff
-#define SMAP_SYNC            0xaa995566
-
-// Type 1 Packet
-#define SMAP_TYPE1(OPCODE,REG,COUNT) \
-    (0x20000000 | ((OPCODE) << 27) | ((REG) << 13) | (COUNT))
-#define SMAP_OP_NOP         0
-#define SMAP_OP_READ        1
-#define SMAP_OP_WRITE       2
-#define SMAP_REG_CMD     0x04  // CMD register, Table 5-22
-#define     SMAP_CMD_DESYNC 0x0000000d  // end of configuration
-#define SMAP_REG_STAT    0x07  // STAT register, Table 5-25
-#define SMAP_REG_BOOTSTS 0x16  // BOOTSTS register, Table 5-35
-
-// Type 2 Packet
-#define SMAP_TYPE2(LEN) (0x40000000 | (LEN))
-
-/*
  * FTDI constants
  */
 #define MREAD   (MPSSE_LSB|MPSSE_READ_NEG)
@@ -208,21 +167,6 @@ struct ftdi_context *init_ftdi(void)
      IDLE_TO_SHIFT_IR,                            \
      DATAWBIT | (READA), 0x04, M(A),                 \
      SHIFT_TO_UPDATE_TO_IDLE((READA), ((A) & 0x100)>>1)
-
-#define PATTERN1 \
-         INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
-         INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
-         INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff)
-
-#define PATTERN2 \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
-         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff)
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -382,17 +326,62 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
     printf("Done sending file\n");
 }
 
+/*
+ * Xilinx constants
+ */
+
+#define IRREG_USER2          0x003
+#define IRREG_CFG_OUT        0x004
+#define IRREG_CFG_IN         0x005
+#define IRREG_USERCODE       0x008
+#define IRREG_JPROGRAM       0x00b
+#define IRREG_JSTART         0x00c
+#define IRREG_ISC_NOOP       0x014
+#define IRREG_BYPASS         0x13f
+
+#define SMAP_DUMMY           0xffffffff
+#define SMAP_SYNC            0xaa995566
+
+// Type 1 Packet
+#define SMAP_TYPE1(OPCODE,REG,COUNT) \
+    (0x20000000 | ((OPCODE) << 27) | ((REG) << 13) | (COUNT))
+#define SMAP_OP_NOP         0
+#define SMAP_OP_READ        1
+#define SMAP_OP_WRITE       2
+#define SMAP_REG_CMD     0x04  // CMD register, Table 5-22
+#define     SMAP_CMD_DESYNC 0x0000000d  // end of configuration
+#define SMAP_REG_STAT    0x07  // STAT register, Table 5-25
+#define SMAP_REG_BOOTSTS 0x16  // BOOTSTS register, Table 5-35
+
+// Type 2 Packet
+#define SMAP_TYPE2(LEN) (0x40000000 | (LEN))
+
+#define PATTERN1 \
+         INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
+         INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), \
+         INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff)
+
+#define PATTERN2 \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff), \
+         INT32(0xffffffff), INT32(0xffffffff), INT32(0xffffffff)
+
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
      DATAR(3),                                              \
      DATARBIT, 0x06,                                        \
      SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0),                     \
      SEND_IMMEDIATE
 
-
+static uint8_t *idreturnvalue = DITEM( INT32(0), PATTERN2, 0xff ); // starts with idcode
 static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t idcode)
 {
     static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
-    static uint8_t retdata[] = DITEM( IDCODE_VALUEB, PATTERN1, 0x00);
+    static uint8_t retdata[] = DITEM( INT32(0), PATTERN1, 0x00); // starts with idcode
     uint32_t returnedid;
 
     send_data_frame(ftdi, DREAD,
@@ -404,6 +393,8 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
     uint8_t *rdata = read_data(ftdi, retdata[0]);
     memcpy(&returnedid, rdata, 4);
     idcode |= 0xf0000000 & returnedid;
+    memcpy(idreturnvalue+1, rdata, 4);    // copy returned value
+    memcpy(retdata+1, rdata, 4);    // copy returned value
     if (idcode != returnedid) {
         printf("[%s] id %x from file does not match actual id %x\n", __FUNCTION__, idcode, returnedid);
         exit(1);
@@ -501,8 +492,6 @@ static struct ftdi_context *initialize(uint32_t idcode)
 
 #define CLOCK_FREQUENCY      30000000 //15000000
 #define SET_CLOCK_DIVISOR    0x86, INT16(30000000/CLOCK_FREQUENCY - 1)
-//00000080: 03 65 10 93
-printf("[%s] %x %x\n", __FUNCTION__, IDCODE_VALUE, idcode);
     /*
      * Initialize FTDI chip and GPIO pins
      */
@@ -540,7 +529,7 @@ printf("[%s] %x %x\n", __FUNCTION__, IDCODE_VALUE, idcode);
              RESET_TO_RESET, IN_RESET_STATE,
              RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
-        iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUEB, PATTERN2, 0xff ));
+        iddata, sizeof(iddata), 9999, idreturnvalue);
     return ftdi;
 }
 
