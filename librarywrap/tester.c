@@ -68,7 +68,7 @@ struct ftdi_context *init_ftdi(void)
     ftdi_read_eeprom(ftdi);
     ftdi_eeprom_decode(ftdi, 0);
     ftdi_get_eeprom_value(ftdi, CHIP_TYPE, &eeprom_val);
-    printf("[%s:%d] CHIP_TYPE %x\n", __FUNCTION__, __LINE__, eeprom_val);
+    printf("[%s] CHIP_TYPE %x\n", __FUNCTION__, eeprom_val);
     ftdi_get_eeprom_buf(ftdi, fbuf, sizeof(fbuf));
 
     /*
@@ -286,31 +286,36 @@ static uint8_t *pulse_gpio(int delay)
     return prebuffer;
 }
 
-static void data_submit(struct ftdi_context *ftdi, uint8_t *buf, int size)
+static void write_data(struct ftdi_context *ftdi, uint8_t *buf, int size)
 {
     struct ftdi_transfer_control* writetc = ftdi_write_data_submit(ftdi, buf, size);
     ftdi_transfer_data_done(writetc);
 }
 
-static uint8_t *check_ftdi_read_data_submit(struct ftdi_context *ftdi, uint8_t *buf)
+static uint8_t *read_data(struct ftdi_context *ftdi, int size)
 {
     static uint8_t last_read_data[10000];
-    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, buf[0]);
+    struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, size);
     ftdi_transfer_data_done(tc);
-
-    if (memcmp(buf+1, last_read_data, buf[0])) {
-        printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-        memdump(buf+1, buf[0], "EXPECT");
-        memdump(last_read_data, buf[0], "ACTUAL");
-    }
     return last_read_data;
+}
+
+static uint8_t *check_read_data(struct ftdi_context *ftdi, uint8_t *buf)
+{
+    uint8_t *rdata = read_data(ftdi, buf[0]);
+    if (memcmp(buf+1, rdata, buf[0])) {
+        printf("[%s] mismatch\n", __FUNCTION__);
+        memdump(buf+1, buf[0], "EXPECT");
+        memdump(rdata, buf[0], "ACTUAL");
+    }
+    return rdata;
 }
 
 static void WRITE_READ(struct ftdi_context *ftdi, uint8_t *req, uint8_t *resp)
 {
-    data_submit(ftdi, req+1, req[0]);
+    write_data(ftdi, req+1, req[0]);
     if (resp)
-        check_ftdi_read_data_submit(ftdi, resp);
+        check_read_data(ftdi, resp);
 }
 
 static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *headerl[],
@@ -344,12 +349,12 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
             *(readptr+2) |= 0x80 & ch; // insert 1 bit of data here
             readptr += tail[0];
         }
-        data_submit(ftdi, packetbuffer, readptr - packetbuffer);
+        write_data(ftdi, packetbuffer, readptr - packetbuffer);
         size -= limit_len+1;
         readptr = packetbuffer;
     }
     if(checkdata)
-        return check_ftdi_read_data_submit(ftdi, checkdata);
+        return check_read_data(ftdi, checkdata);
     return NULL;
 }
 
@@ -374,7 +379,7 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
         headerp = DITEM(PAUSE_TO_SHIFT);
         limit_len = MAX_SINGLE_USB_DATA;
     } while(size == FILE_READSIZE);
-    printf("[%s:%d] done sending file\n", __FUNCTION__, __LINE__);
+    printf("Done sending file\n");
 }
 
 #define COMMAND_ENDING  /* Enters in Shift-DR */            \
@@ -384,26 +389,40 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
      SEND_IMMEDIATE
 
 
-static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep)
+static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t idcode)
 {
     static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
+    static uint8_t retdata[] = DITEM( IDCODE_VALUEB, PATTERN1, 0x00);
+    uint32_t returnedid;
 
     send_data_frame(ftdi, DREAD,
         (uint8_t *[]){statep,
                       DITEM(TMS_RESET_WEIRD, RESET_TO_SHIFT_DR),
                       NULL},
         DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
-        patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUEB, PATTERN1, 0x00));
+        patdata, sizeof(patdata), 9999, NULL);
+    uint8_t *rdata = read_data(ftdi, retdata[0]);
+    memcpy(&returnedid, rdata, 4);
+    idcode |= 0xf0000000 & returnedid;
+    if (idcode != returnedid) {
+        printf("[%s] id %x from file does not match actual id %x\n", __FUNCTION__, idcode, returnedid);
+        exit(1);
+    }
+    if (memcmp(retdata+1, rdata, retdata[0])) {
+        printf("[%s]\n", __FUNCTION__);
+        memdump(retdata+1, retdata[0], "EXPECT");
+        memdump(rdata, retdata[0], "ACTUAL");
+    }
 }
 
-static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
+static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep, uint32_t idcode)
 {
     uint8_t *added_item[] = {
         DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
         DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
     static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
     int i, j = 3;
-    check_idcode(ftdi, statep);
+    check_idcode(ftdi, statep, idcode);
     while (j-- > 0) {
         uint8_t *alist[5] = {
             DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
@@ -505,9 +524,9 @@ printf("[%s] %x %x\n", __FUNCTION__, IDCODE_VALUE, idcode);
     /*
      * Step 5: Check Device ID
      */
-    check_idcode(ftdi, DITEM( RESET_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    check_idcode(ftdi, DITEM( RESET_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
 
     WRITE_READ(ftdi,
        DITEM(IDLE_TO_RESET, IN_RESET_STATE),
@@ -531,15 +550,18 @@ int main(int argc, char **argv)
     struct ftdi_context *ftdi;
     uint32_t idcode;
     int i;
+    int inputfd = 0;   /* default input for '-' is stdin */
 
     if (argc != 2) {
         printf("tester <filename>\n");
         exit(1);
     }
-    int inputfd = open(argv[1], O_RDONLY);
-    if (inputfd == -1) {
-        printf("Unable to open file '%s'\n", argv[1]);
-        exit(-1);
+    if (strcmp(argv[1], "-")) {
+        inputfd = open(argv[1], O_RDONLY);
+        if (inputfd == -1) {
+            printf("Unable to open file '%s'\n", argv[1]);
+            exit(-1);
+        }
     }
     lseek(inputfd, 0x80, SEEK_SET); /* read idcode from file to be programmed */
     read(inputfd, &idcode, sizeof(idcode));
@@ -559,10 +581,10 @@ int main(int argc, char **argv)
             DITEM( INT16(0x1188) ));
             //DITEM( INT16(0xf5af) )); // when already programmed
     read_status(ftdi, cfg_in_command, NULL);
-    bypass_test(ftdi, DITEM( RESET_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( RESET_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
 
     /*
      * Step 2: Initialization
@@ -613,7 +635,7 @@ int main(int argc, char **argv)
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
     ftdi_deinit(ftdi);
     execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
