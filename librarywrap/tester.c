@@ -34,6 +34,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 #include "ftdi_reference.h"
 
@@ -546,12 +548,20 @@ static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
     return rdata[0] | (rdata[1] << 8);
 }
 
+static uint64_t fetch40(struct ftdi_context *ftdi, uint8_t *req)
+{
+    write_data(ftdi, req+1, req[0]);
+    uint8_t *rdata = read_data(ftdi, 5);
+    return rdata[0] | (rdata[1] << 8) | (rdata[2] << 16) | (rdata[3] << 24) | (((uint64_t)rdata[4]) << 32);
+}
+
 static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 int main(int argc, char **argv)
 {
     struct ftdi_context *ftdi;
     uint32_t idcode;
     uint16_t ret16;
+    uint64_t ret40;
     int i;
     int inputfd = 0;   /* default input for '-' is stdin */
 
@@ -572,12 +582,12 @@ int main(int argc, char **argv)
     lseek(inputfd, 0, SEEK_SET);
     ftdi = initialize(idcode, CLOCK_FREQUENCY);
 
-    WRITE_READ(ftdi,
+    if ((ret40 = fetch40(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
             EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USERCODE),
             IDLE_TO_SHIFT_DR,
-            COMMAND_ENDING),
-        DITEM( 0xff, INT32(0xffffffff) ));
+            COMMAND_ENDING))) != 0xffffffffff)
+        printf("[%s:%d] mismatch %" PRIu64 "\n", __FUNCTION__, __LINE__, ret40);
     for (i = 0; i < 3; i++) {
         ret16 = fetch16(ftdi, DITEM(
             EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
@@ -635,7 +645,8 @@ int main(int argc, char **argv)
     read_smap(ftdi, DITEM( EXIT1_TO_IDLE ), SMAP_REG_STAT,
         DITEM( 0x02, SWAP32B(0xfcfe7910) ));
 
-    WRITE_READ(ftdi, DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE), NULL);
+    static uint8_t bypass_end[] = DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE);
+    write_data(ftdi, bypass_end+1, bypass_end[0]);
     if ((ret16 = fetch16(ftdi,
         DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
