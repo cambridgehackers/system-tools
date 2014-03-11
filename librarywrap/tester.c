@@ -329,7 +329,8 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
 /*
  * Xilinx constants
  */
-#define CLOCK_FREQUENCY      30000000 //15000000
+//#define CLOCK_FREQUENCY      15000000
+#define CLOCK_FREQUENCY      30000000
 
 #define IRREG_USER2          0x003
 #define IRREG_CFG_OUT        0x004
@@ -463,7 +464,7 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
     WRITE_READ(ftdi, DITEM( IDLE_TO_RESET ), NULL);
 }
 
-static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
+static void read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
 {
     static uint8_t request_data[] = {INT32(4)};
 
@@ -475,7 +476,7 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
                         DATAW(4), SWAP32(SMAP_SYNC),
                         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
                         DATAW(4)),
-                      (uint8_t []){4, SWAP32(data)},
+                      (uint8_t []){4, SWAP32(SMAP_TYPE1(SMAP_OP_READ, data, 1))},
                       DITEM(DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
                         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
                         DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
@@ -538,11 +539,19 @@ static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency
     return ftdi;
 }
 
+static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
+{
+    write_data(ftdi, req+1, req[0]);
+    uint8_t *rdata = read_data(ftdi, sizeof(uint16_t));
+    return rdata[0] | (rdata[1] << 8);
+}
+
 static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 int main(int argc, char **argv)
 {
     struct ftdi_context *ftdi;
     uint32_t idcode;
+    uint16_t ret16;
     int i;
     int inputfd = 0;   /* default input for '-' is stdin */
 
@@ -570,19 +579,17 @@ int main(int argc, char **argv)
             COMMAND_ENDING),
         DITEM( 0xff, INT32(0xffffffff) ));
     for (i = 0; i < 3; i++) {
-        static uint8_t bypass_req[] = DITEM( EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS), SEND_IMMEDIATE);
-        static uint8_t bypass_return[] = DITEM( INT16(0x1188));
-        write_data(ftdi, bypass_req+1, bypass_req[0]);
-        uint8_t *rdata = read_data(ftdi, bypass_return[0]);
-        uint16_t retval = rdata[0] | (rdata[1] << 8);
-        if (retval == 0x118f)
-            printf("xjtag: bypass first time %x\n", retval);
-        else if (retval == 0x1188)
-            printf("xjtag: bypass next times %x\n", retval);
-        else if (retval == 0xf5af)
-            printf("xjtag: bypass already programmed %x\n", retval);
+        ret16 = fetch16(ftdi, DITEM(
+            EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
+            SEND_IMMEDIATE));
+        if (ret16 == 0x118f)
+            printf("xjtag: bypass first time %x\n", ret16);
+        else if (ret16 == 0x1188)
+            printf("xjtag: bypass next times %x\n", ret16);
+        else if (ret16 == 0xf5af)
+            printf("xjtag: bypass already programmed %x\n", ret16);
         else
-            printf("xjtag: bypass mismatch %x\n", retval);
+            printf("xjtag: bypass mismatch %x\n", ret16);
     }
     read_status(ftdi, cfg_in_command, NULL);
     bypass_test(ftdi, DITEM( RESET_TO_RESET));
@@ -593,55 +600,50 @@ int main(int argc, char **argv)
     /*
      * Step 2: Initialization
      */
-    WRITE_READ(ftdi,
+    if ((ret16 = fetch16(ftdi,
         catlist((uint8_t *[]){
             DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
                JTAG_IRREG(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
                JTAG_IRREG(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
             pulse_gpio(CLOCK_FREQUENCY/80) /* 12.5 msec */,
             DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE),
-            NULL}),
-       DITEM( INT16(0x4488) ));
+            NULL}))) != 0x4488)
+        printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
 
     /*
      * Step 6: Load Configuration Data Frames
      */
-    WRITE_READ(ftdi,
-        DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), SEND_IMMEDIATE),
-        DITEM( INT16(0x458a) ));
+    if ((ret16 = fetch16(ftdi,
+        DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), SEND_IMMEDIATE))) != 0x458a)
+        printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
     send_data_file(ftdi, inputfd);
 
     /*
      * Step 8: Startup
      */
-    send_smap(ftdi,
-        pulse_gpio(CLOCK_FREQUENCY/800),  // 1.25 msec
-        SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_BOOTSTS, 1),
+    read_smap(ftdi, pulse_gpio(CLOCK_FREQUENCY/800 /*1.25 msec*/), SMAP_REG_BOOTSTS,
         DITEM( 0, SWAP32B(0x1000000) ));
 
-    WRITE_READ(ftdi,
-        DITEM(
+    if ((ret16 = fetch16(ftdi, DITEM(
             EXIT1_TO_IDLE,
             JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE,
             JTAG_IRREG(0, IRREG_JSTART), EXIT1_TO_IDLE,
             TMSW_DELAY,
-            JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE),
-        DITEM( INT16(0xd6ac) ));
+            JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE))) != 0xd6ac)
+        printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
 
-    send_smap(ftdi,
-        DITEM( EXIT1_TO_IDLE ),
-        SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1),
+    read_smap(ftdi, DITEM( EXIT1_TO_IDLE ), SMAP_REG_STAT,
         DITEM( 0x02, SWAP32B(0xfcfe7910) ));
 
     WRITE_READ(ftdi, DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE), NULL);
-    WRITE_READ(ftdi,
+    if ((ret16 = fetch16(ftdi,
         DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
-              SEND_IMMEDIATE),
-        DITEM( INT16(0xf5a9) ));
+              SEND_IMMEDIATE))) != 0xf5a9)
+        printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
     ftdi_deinit(ftdi);
-    execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
+    //execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
     return 0;
 }
