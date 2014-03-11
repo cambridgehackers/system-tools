@@ -126,7 +126,8 @@ struct ftdi_context *init_ftdi(void)
      |                   1) /* required by 1149.1 */
 #define IDCODE_VERSION     0x40000000
 
-#define IDCODE_VALUE INT32(IDCODE_VERSION | IDCODE_XC7K325T)
+#define IDCODE_VALUE  (IDCODE_VERSION | IDCODE_XC7K325T)
+#define IDCODE_VALUEB INT32(IDCODE_VALUE)
 
 #define IRREG_USER2          0x003
 #define IRREG_CFG_OUT        0x004
@@ -353,7 +354,7 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 }
 
 static uint8_t bitswap[256];
-static void send_data_file(struct ftdi_context *ftdi, const char *filename)
+static void send_data_file(struct ftdi_context *ftdi, int inputfd)
 {
     int size, i;
     uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
@@ -361,8 +362,7 @@ static void send_data_file(struct ftdi_context *ftdi, const char *filename)
          DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
     int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
 
-    printf("Starting to send file '%s'\n", filename);
-    int inputfd = open(filename, O_RDONLY);
+    printf("Starting to send file\n");
     do {
         static uint8_t filebuffer[FILE_READSIZE];
         size = read(inputfd, filebuffer, FILE_READSIZE);
@@ -393,7 +393,7 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep)
                       DITEM(TMS_RESET_WEIRD, RESET_TO_SHIFT_DR),
                       NULL},
         DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
-        patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUE, PATTERN1, 0x00));
+        patdata, sizeof(patdata), 9999, DITEM( IDCODE_VALUEB, PATTERN1, 0x00));
 }
 
 static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
@@ -475,19 +475,15 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
         request_data, sizeof(request_data), 9999, rdata);
 }
 
-static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
-int main(int argc, char **argv)
+static struct ftdi_context *initialize(uint32_t idcode)
 {
     struct ftdi_context *ftdi;
     int i;
 
-    if (argc != 2) {
-        printf("tester <filename>\n");
-        exit(1);
-    }
-
-#define CLOCK_FREQUENCY      15000000
+#define CLOCK_FREQUENCY      30000000 //15000000
 #define SET_CLOCK_DIVISOR    0x86, INT16(30000000/CLOCK_FREQUENCY - 1)
+//00000080: 03 65 10 93
+printf("[%s] %x %x\n", __FUNCTION__, IDCODE_VALUE, idcode);
     /*
      * Initialize FTDI chip and GPIO pins
      */
@@ -525,7 +521,31 @@ int main(int argc, char **argv)
              RESET_TO_RESET, IN_RESET_STATE,
              RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
-        iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUE, PATTERN2, 0xff ));
+        iddata, sizeof(iddata), 9999, DITEM( IDCODE_VALUEB, PATTERN2, 0xff ));
+    return ftdi;
+}
+
+static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
+int main(int argc, char **argv)
+{
+    struct ftdi_context *ftdi;
+    uint32_t idcode;
+    int i;
+
+    if (argc != 2) {
+        printf("tester <filename>\n");
+        exit(1);
+    }
+    int inputfd = open(argv[1], O_RDONLY);
+    if (inputfd == -1) {
+        printf("Unable to open file '%s'\n", argv[1]);
+        exit(-1);
+    }
+    lseek(inputfd, 0x80, SEEK_SET); /* read idcode from file to be programmed */
+    read(inputfd, &idcode, sizeof(idcode));
+    idcode = (M(idcode) << 24) | (M(idcode >> 8) << 16) | (M(idcode >> 16) << 8) | M(idcode >> 24);
+    lseek(inputfd, 0, SEEK_SET);
+    ftdi = initialize(idcode);
 
     WRITE_READ(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
@@ -563,7 +583,7 @@ int main(int argc, char **argv)
     WRITE_READ(ftdi,
         DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), SEND_IMMEDIATE),
         DITEM( INT16(0x458a) ));
-    send_data_file(ftdi, argv[1]);
+    send_data_file(ftdi, inputfd);
 
     /*
      * Step 8: Startup
