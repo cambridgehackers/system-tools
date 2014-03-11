@@ -329,6 +329,7 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
 /*
  * Xilinx constants
  */
+#define CLOCK_FREQUENCY      30000000 //15000000
 
 #define IRREG_USER2          0x003
 #define IRREG_CFG_OUT        0x004
@@ -377,11 +378,13 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
      SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0),                     \
      SEND_IMMEDIATE
 
-static uint8_t *idreturnvalue = DITEM( INT32(0), PATTERN2, 0xff ); // starts with idcode
+static uint8_t idcode_pattern1[] = DITEM( INT32(0), PATTERN1, 0x00); // starts with idcode
+static uint8_t idcode_pattern2[] = DITEM( INT32(0), PATTERN2, 0xff); // starts with idcode
+
+static int idcode_setup;
 static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t idcode)
 {
     static uint8_t patdata[] =  {INT32(0xff), PATTERN1};
-    static uint8_t retdata[] = DITEM( INT32(0), PATTERN1, 0x00); // starts with idcode
     uint32_t returnedid;
 
     send_data_frame(ftdi, DREAD,
@@ -390,30 +393,33 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
                       NULL},
         DITEM( SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE),
         patdata, sizeof(patdata), 9999, NULL);
-    uint8_t *rdata = read_data(ftdi, retdata[0]);
-    memcpy(&returnedid, rdata, 4);
-    idcode |= 0xf0000000 & returnedid;
-    memcpy(idreturnvalue+1, rdata, 4);    // copy returned value
-    memcpy(retdata+1, rdata, 4);    // copy returned value
-    if (idcode != returnedid) {
-        printf("[%s] id %x from file does not match actual id %x\n", __FUNCTION__, idcode, returnedid);
-        exit(1);
+    uint8_t *rdata = read_data(ftdi, idcode_pattern1[0]);
+    if (!idcode_setup) {    // only setup idcode patterns on first call!
+        memcpy(&returnedid, rdata, 4);
+        idcode |= 0xf0000000 & returnedid;
+        memcpy(idcode_pattern2+1, rdata, 4); // copy returned idcode
+        memcpy(idcode_pattern1+1, rdata, 4);       // copy returned idcode
+        idcode_setup = 1;
+        if (idcode != returnedid) {
+            printf("[%s] id %x from file does not match actual id %x\n", __FUNCTION__, idcode, returnedid);
+            exit(1);
+        }
     }
-    if (memcmp(retdata+1, rdata, retdata[0])) {
+    if (memcmp(idcode_pattern1+1, rdata, idcode_pattern1[0])) {
         printf("[%s]\n", __FUNCTION__);
-        memdump(retdata+1, retdata[0], "EXPECT");
-        memdump(rdata, retdata[0], "ACTUAL");
+        memdump(idcode_pattern1+1, idcode_pattern1[0], "EXPECT");
+        memdump(rdata, idcode_pattern1[0], "ACTUAL");
     }
 }
 
-static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep, uint32_t idcode)
+static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
 {
     uint8_t *added_item[] = {
         DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
         DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
     static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
     int i, j = 3;
-    check_idcode(ftdi, statep, idcode);
+    check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
     while (j-- > 0) {
         uint8_t *alist[5] = {
             DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
@@ -485,18 +491,17 @@ static void send_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
         request_data, sizeof(request_data), 9999, rdata);
 }
 
-static struct ftdi_context *initialize(uint32_t idcode)
+static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency)
 {
     struct ftdi_context *ftdi;
     int i;
 
-#define CLOCK_FREQUENCY      30000000 //15000000
-#define SET_CLOCK_DIVISOR    0x86, INT16(30000000/CLOCK_FREQUENCY - 1)
+#define SET_CLOCK_DIVISOR    0x86, INT16(30000000/clock_frequency - 1)
     /*
      * Initialize FTDI chip and GPIO pins
      */
     ftdi = init_ftdi();   /* generic initialization */
-    static uint8_t initialize_sequence[] = {
+    uint8_t initialize_sequence[] = {
          LOOPBACK_END, // Disconnect TDI/DO from loopback
          DIS_DIV_5, // Disable clk divide by 5
          SET_CLOCK_DIVISOR,
@@ -514,13 +519,13 @@ static struct ftdi_context *initialize(uint32_t idcode)
      * Step 5: Check Device ID
      */
     check_idcode(ftdi, DITEM( RESET_TO_RESET), idcode);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
 
     WRITE_READ(ftdi,
        DITEM(IDLE_TO_RESET, IN_RESET_STATE),
        NULL);
-    static uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
+    uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
     ftdi_write_data(ftdi, command_set_divisor, sizeof(command_set_divisor));
 
     static uint8_t iddata[] = {INT32(0xffffffff),  PATTERN2};
@@ -529,7 +534,7 @@ static struct ftdi_context *initialize(uint32_t idcode)
              RESET_TO_RESET, IN_RESET_STATE,
              RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
-        iddata, sizeof(iddata), 9999, idreturnvalue);
+        iddata, sizeof(iddata), 9999, idcode_pattern2);
     return ftdi;
 }
 
@@ -556,7 +561,7 @@ int main(int argc, char **argv)
     read(inputfd, &idcode, sizeof(idcode));
     idcode = (M(idcode) << 24) | (M(idcode >> 8) << 16) | (M(idcode >> 16) << 8) | M(idcode >> 24);
     lseek(inputfd, 0, SEEK_SET);
-    ftdi = initialize(idcode);
+    ftdi = initialize(idcode, CLOCK_FREQUENCY);
 
     WRITE_READ(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
@@ -564,16 +569,26 @@ int main(int argc, char **argv)
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
         DITEM( 0xff, INT32(0xffffffff) ));
-    for (i = 0; i < 3; i++)
-        WRITE_READ(ftdi,
-            DITEM( EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS), SEND_IMMEDIATE ),
-            DITEM( INT16(0x1188) ));
-            //DITEM( INT16(0xf5af) )); // when already programmed
+    for (i = 0; i < 3; i++) {
+        static uint8_t bypass_req[] = DITEM( EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS), SEND_IMMEDIATE);
+        static uint8_t bypass_return[] = DITEM( INT16(0x1188));
+        write_data(ftdi, bypass_req+1, bypass_req[0]);
+        uint8_t *rdata = read_data(ftdi, bypass_return[0]);
+        uint16_t retval = rdata[0] | (rdata[1] << 8);
+        if (retval == 0x118f)
+            printf("xjtag: bypass first time %x\n", retval);
+        else if (retval == 0x1188)
+            printf("xjtag: bypass next times %x\n", retval);
+        else if (retval == 0xf5af)
+            printf("xjtag: bypass already programmed %x\n", retval);
+        else
+            printf("xjtag: bypass mismatch %x\n", retval);
+    }
     read_status(ftdi, cfg_in_command, NULL);
-    bypass_test(ftdi, DITEM( RESET_TO_RESET), idcode);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( RESET_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
 
     /*
      * Step 2: Initialization
@@ -624,7 +639,7 @@ int main(int argc, char **argv)
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
               SEND_IMMEDIATE),
         DITEM( INT16(0xf5a9) ));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), idcode);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
     ftdi_deinit(ftdi);
     execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
