@@ -115,11 +115,11 @@ struct ftdi_context *init_ftdi(void)
 #define MS(A)              BSWAP(M(A))
 #define SWAP32(A)          MS((A) >> 24), MS((A) >> 16), MS((A) >> 8), MS(A)
 #define SWAP32B(A)         MS(A), MS((A) >> 8), MS((A) >> 16), MS((A) >> 24)
-#define C2BIT40(A)       (  ((uint64_t)bitswap[(A)[0]])        \
-                         | (((uint64_t)bitswap[(A)[1]]) <<  8) \
-                         | (((uint64_t)bitswap[(A)[2]]) << 16) \
-                         | (((uint64_t)bitswap[(A)[3]]) << 24) \
-                         | (((uint64_t)bitswap[(A)[4]]) << 32) )
+#define C2BIT40(A)       (  ((uint64_t)(A)[0])        \
+                         | (((uint64_t)(A)[1]) <<  8) \
+                         | (((uint64_t)(A)[2]) << 16) \
+                         | (((uint64_t)(A)[3]) << 24) \
+                         | (((uint64_t)(A)[4]) << 32) )
 
 /*
  * FTDI constants
@@ -243,12 +243,23 @@ static void write_data(struct ftdi_context *ftdi, uint8_t *buf, int size)
     ftdi_transfer_data_done(writetc);
 }
 
+static uint8_t bitswap[256];
 static uint8_t *read_data(struct ftdi_context *ftdi, int size)
 {
     static uint8_t last_read_data[10000];
     struct ftdi_transfer_control* tc = ftdi_read_data_submit(ftdi, last_read_data, size);
     ftdi_transfer_data_done(tc);
     return last_read_data;
+}
+
+static uint64_t read_data_int(struct ftdi_context *ftdi, int size)
+{
+    uint64_t ret = 0;
+    uint8_t *bufp = read_data(ftdi, size);
+    uint8_t *backp = bufp + size;
+    while (backp > bufp)
+        ret = (ret << 8) | bitswap[*--backp];  //each byte is bitswapped
+    return ret;
 }
 
 static uint8_t *check_read_data(struct ftdi_context *ftdi, uint8_t *buf)
@@ -262,7 +273,6 @@ static uint8_t *check_read_data(struct ftdi_context *ftdi, uint8_t *buf)
     return rdata;
 }
 
-static uint8_t bitswap[256];
 static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
 {
     write_data(ftdi, req+1, req[0]);
@@ -273,8 +283,7 @@ static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
 static uint64_t fetch40(struct ftdi_context *ftdi, uint8_t *req)
 {
     write_data(ftdi, req+1, req[0]);
-    uint8_t *rdata = read_data(ftdi, 5);
-    return C2BIT40(rdata);
+    return read_data_int(ftdi, 5);
 }
 
 static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *headerl[],
@@ -457,26 +466,23 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
 
 static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3)
 {
-    int i;
-    union {
-        uint32_t i;
-        uint8_t  c[4];
-    } status;
     static uint8_t request_data[] = {
          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
          SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0)};
 
-    uint8_t *lastp = send_data_frame(ftdi, 0,
+    send_data_frame(ftdi, 0,
         (uint8_t *[]){DITEM(IDLE_TO_RESET), stat2, stat3, NULL},
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
             EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_OUT),
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
-        request_data, sizeof(request_data), 9999, DITEM( 2, SWAP32B(0xf0fe7910) ));
-    for (i = 0; i < 4; i++)
-        status.c[i] = bitswap[lastp[i+1]];
-    printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
-        status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
+        request_data, sizeof(request_data), 9999, NULL);
+    uint64_t ret40 = read_data_int(ftdi, 5);
+    uint32_t status = ret40 >> 8;
+    if (M(ret40) != 0x40 || status != 0xf0fe7910)
+        printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
+    printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status,
+        status & 0x4000, status & 0x2000, status & 0x10, (status >> 18) & 7);
     static uint8_t i2reset[] = DITEM( IDLE_TO_RESET );
     write_data(ftdi, i2reset+1, i2reset[0]);
 }
@@ -507,8 +513,7 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
               SHIFT_TO_EXIT1(DREAD, 0),
               SEND_IMMEDIATE ),
         request_data, sizeof(request_data), 9999, NULL);
-    uint8_t *rdata = read_data(ftdi, 5);
-    return C2BIT40(rdata);
+    return read_data_int(ftdi, 5);
 }
 
 static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency)
