@@ -115,6 +115,11 @@ struct ftdi_context *init_ftdi(void)
 #define MS(A)              BSWAP(M(A))
 #define SWAP32(A)          MS((A) >> 24), MS((A) >> 16), MS((A) >> 8), MS(A)
 #define SWAP32B(A)         MS(A), MS((A) >> 8), MS((A) >> 16), MS((A) >> 24)
+#define C2BIT40(A)       (  ((uint64_t)bitswap[(A)[0]])        \
+                         | (((uint64_t)bitswap[(A)[1]]) <<  8) \
+                         | (((uint64_t)bitswap[(A)[2]]) << 16) \
+                         | (((uint64_t)bitswap[(A)[3]]) << 24) \
+                         | (((uint64_t)bitswap[(A)[4]]) << 32) )
 
 /*
  * FTDI constants
@@ -257,6 +262,7 @@ static uint8_t *check_read_data(struct ftdi_context *ftdi, uint8_t *buf)
     return rdata;
 }
 
+static uint8_t bitswap[256];
 static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
 {
     write_data(ftdi, req+1, req[0]);
@@ -268,7 +274,7 @@ static uint64_t fetch40(struct ftdi_context *ftdi, uint8_t *req)
 {
     write_data(ftdi, req+1, req[0]);
     uint8_t *rdata = read_data(ftdi, 5);
-    return rdata[0] | (rdata[1] << 8) | (rdata[2] << 16) | (rdata[3] << 24) | (((uint64_t)rdata[4]) << 32);
+    return C2BIT40(rdata);
 }
 
 static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *headerl[],
@@ -311,7 +317,6 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
     return NULL;
 }
 
-static uint8_t bitswap[256];
 static void send_data_file(struct ftdi_context *ftdi, int inputfd)
 {
     int size, i;
@@ -440,7 +445,7 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
             NULL, NULL, NULL};
         for (i = 0; i < 4; i++) {
            if ((ret40 = fetch40(ftdi, catlist(alist))) != 0)
-               printf("[%s:%d] mismatch %" PRIu64 "\n", __FUNCTION__, __LINE__, ret40);
+               printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
            if (i <= 1) {
                alist[3] = alist[2];
                alist[2] = alist[1];
@@ -476,7 +481,7 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
     write_data(ftdi, i2reset+1, i2reset[0]);
 }
 
-static void read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
+static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data)
 {
     static uint8_t request_data[] = {INT32(4)};
 
@@ -501,7 +506,9 @@ static void read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data,
               DATARWBIT, 0x06, 0x00,
               SHIFT_TO_EXIT1(DREAD, 0),
               SEND_IMMEDIATE ),
-        request_data, sizeof(request_data), 9999, rdata);
+        request_data, sizeof(request_data), 9999, NULL);
+    uint8_t *rdata = read_data(ftdi, 5);
+    return C2BIT40(rdata);
 }
 
 static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency)
@@ -579,14 +586,14 @@ int main(int argc, char **argv)
 
     if ((ret40 = fetch40(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-            EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USERCODE),
-            IDLE_TO_SHIFT_DR,
-            COMMAND_ENDING))) != 0xffffffffff)
-        printf("[%s:%d] mismatch %" PRIu64 "\n", __FUNCTION__, __LINE__, ret40);
+              EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USERCODE),
+              IDLE_TO_SHIFT_DR,
+              COMMAND_ENDING))) != 0xffffffffff)
+        printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
     for (i = 0; i < 3; i++) {
         ret16 = fetch16(ftdi, DITEM(
-            EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
-            SEND_IMMEDIATE));
+              EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
+              SEND_IMMEDIATE));
         if (ret16 == 0x118f)
             printf("xjtag: bypass first time %x\n", ret16);
         else if (ret16 == 0x1188)
@@ -601,7 +608,6 @@ int main(int argc, char **argv)
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-
     /*
      * Step 2: Initialization
      */
@@ -610,11 +616,10 @@ int main(int argc, char **argv)
             DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
                JTAG_IRREG(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
                JTAG_IRREG(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
-            pulse_gpio(CLOCK_FREQUENCY/80) /* 12.5 msec */,
+            pulse_gpio(CLOCK_FREQUENCY/80/* 12.5 msec */),
             DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE),
             NULL}))) != 0x4488)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
-
     /*
      * Step 6: Load Configuration Data Frames
      */
@@ -622,24 +627,20 @@ int main(int argc, char **argv)
         DITEM( EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), SEND_IMMEDIATE))) != 0x458a)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
     send_data_file(ftdi, inputfd);
-
     /*
      * Step 8: Startup
      */
-    read_smap(ftdi, pulse_gpio(CLOCK_FREQUENCY/800 /*1.25 msec*/), SMAP_REG_BOOTSTS,
-        DITEM( 0, SWAP32B(0x1000000) ));
-
-    if ((ret16 = fetch16(ftdi, DITEM(
-            EXIT1_TO_IDLE,
+    if ((ret40 = read_smap(ftdi, pulse_gpio(CLOCK_FREQUENCY/800/*1.25 msec*/), SMAP_REG_BOOTSTS)) != 0x0100000000)
+        printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
+    if ((ret16 = fetch16(ftdi, DITEM( EXIT1_TO_IDLE,
             JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE,
             JTAG_IRREG(0, IRREG_JSTART), EXIT1_TO_IDLE,
             TMSW_DELAY,
             JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE))) != 0xd6ac)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
 
-    read_smap(ftdi, DITEM( EXIT1_TO_IDLE ), SMAP_REG_STAT,
-        DITEM( 0x02, SWAP32B(0xfcfe7910) ));
-
+    if ((ret40 = read_smap(ftdi, DITEM( EXIT1_TO_IDLE ), SMAP_REG_STAT)) != (((uint64_t)0xfcfe7910 << 8) | 0x40))
+        printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
     static uint8_t bypass_end[] = DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE);
     write_data(ftdi, bypass_end+1, bypass_end[0]);
     if ((ret16 = fetch16(ftdi,
