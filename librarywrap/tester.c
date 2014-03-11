@@ -596,5 +596,6 @@ int main(int argc, char **argv)
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
     ftdi_deinit(ftdi);
+    execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
     return 0;
 }
