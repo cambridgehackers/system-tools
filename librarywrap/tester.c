@@ -257,11 +257,18 @@ static uint8_t *check_read_data(struct ftdi_context *ftdi, uint8_t *buf)
     return rdata;
 }
 
-static void WRITE_READ(struct ftdi_context *ftdi, uint8_t *req, uint8_t *resp)
+static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
 {
     write_data(ftdi, req+1, req[0]);
-    if (resp)
-        check_read_data(ftdi, resp);
+    uint8_t *rdata = read_data(ftdi, sizeof(uint16_t));
+    return rdata[0] | (rdata[1] << 8);
+}
+
+static uint64_t fetch40(struct ftdi_context *ftdi, uint8_t *req)
+{
+    write_data(ftdi, req+1, req[0]);
+    uint8_t *rdata = read_data(ftdi, 5);
+    return rdata[0] | (rdata[1] << 8) | (rdata[2] << 16) | (rdata[3] << 24) | (((uint64_t)rdata[4]) << 32);
 }
 
 static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, uint8_t *headerl[],
@@ -420,8 +427,9 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
     uint8_t *added_item[] = {
         DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
         DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
-    static uint8_t readdata_five_zeros[] = DITEM( INT32(0), 0x00 );
     int i, j = 3;
+    uint64_t ret40;
+
     check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
     while (j-- > 0) {
         uint8_t *alist[5] = {
@@ -431,7 +439,8 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
             DITEM(COMMAND_ENDING),
             NULL, NULL, NULL};
         for (i = 0; i < 4; i++) {
-           WRITE_READ(ftdi, catlist(alist), readdata_five_zeros);
+           if ((ret40 = fetch40(ftdi, catlist(alist))) != 0)
+               printf("[%s:%d] mismatch %" PRIu64 "\n", __FUNCTION__, __LINE__, ret40);
            if (i <= 1) {
                alist[3] = alist[2];
                alist[2] = alist[1];
@@ -463,7 +472,8 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
         status.c[i] = bitswap[lastp[i+1]];
     printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status.i,
         status.i & 0x4000, status.i & 0x2000, status.i & 0x10, (status.i >> 18) & 7);
-    WRITE_READ(ftdi, DITEM( IDLE_TO_RESET ), NULL);
+    static uint8_t i2reset[] = DITEM( IDLE_TO_RESET );
+    write_data(ftdi, i2reset+1, i2reset[0]);
 }
 
 static void read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data, uint8_t *rdata)
@@ -525,9 +535,8 @@ static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
 
-    WRITE_READ(ftdi,
-       DITEM(IDLE_TO_RESET, IN_RESET_STATE),
-       NULL);
+    static uint8_t i2resetin[] = DITEM(IDLE_TO_RESET, IN_RESET_STATE);
+    write_data(ftdi, i2resetin+1, i2resetin[0]);
     uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
     ftdi_write_data(ftdi, command_set_divisor, sizeof(command_set_divisor));
 
@@ -539,20 +548,6 @@ static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999, idcode_pattern2);
     return ftdi;
-}
-
-static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
-{
-    write_data(ftdi, req+1, req[0]);
-    uint8_t *rdata = read_data(ftdi, sizeof(uint16_t));
-    return rdata[0] | (rdata[1] << 8);
-}
-
-static uint64_t fetch40(struct ftdi_context *ftdi, uint8_t *req)
-{
-    write_data(ftdi, req+1, req[0]);
-    uint8_t *rdata = read_data(ftdi, 5);
-    return rdata[0] | (rdata[1] << 8) | (rdata[2] << 16) | (rdata[3] << 24) | (((uint64_t)rdata[4]) << 32);
 }
 
 static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
