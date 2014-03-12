@@ -1,7 +1,5 @@
 WRAP: ftdi_init
-    fprintf(logfile, "\n%s(%s);\n", __FUNCTION__, translate_context(ftdi));
-    if (!master_ftdi)
-        master_ftdi = ftdi;
+    //fprintf(logfile, "\n%s(%s);\n", __FUNCTION__, translate_context(ftdi));
     //end_datafile();
 WRAP: ftdi_deinit
     fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
@@ -33,6 +31,8 @@ WRAP: ftdi_new
 POST:
     fprintf(logfile, "//%p\n%s = %s();\n", retval, translate_context(retval), __FUNCTION__);
     dump_context(retval);
+    if (!master_ftdi)
+        master_ftdi = retval;
     if (datafile_fd < 0)
         datafile_fd = creat("/tmp/xx.datafile", 0666);
 WRAP: ftdi_read_data

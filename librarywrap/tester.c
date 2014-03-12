@@ -74,7 +74,6 @@ struct ftdi_context *init_ftdi(const char *serialno)
      * Locate USB interface for JTAG
      */
     struct ftdi_context *ftdi = ftdi_new();
-    ftdi_init(ftdi);
     ftdi_usb_find_all(ftdi, &devlist, 0x0, 0x0);
     curdev = devlist;
     while(curdev) {
