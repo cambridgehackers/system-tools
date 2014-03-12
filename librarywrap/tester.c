@@ -489,7 +489,7 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
     }
 }
 
-static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3)
+static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3, uint32_t expected)
 {
     static uint8_t request_data[] = {
          SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
@@ -504,7 +504,7 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
         request_data, sizeof(request_data), 9999, NULL);
     uint64_t ret40 = read_data_int(ftdi, 5);
     uint32_t status = ret40 >> 8;
-    if (M(ret40) != 0x40 || status != 0xf0fe7910)
+    if (M(ret40) != 0x40 || status != expected)
         printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
     printf("STATUS %08x done %x release_done %x eos %x startup_state %x\n", status,
         status & 0x4000, status & 0x2000, status & 0x10, (status >> 18) & 7);
@@ -638,7 +638,7 @@ int main(int argc, char **argv)
         else
             printf("xjtag: bypass mismatch %x\n", ret16);
     }
-    read_status(ftdi, cfg_in_command, NULL);
+    read_status(ftdi, cfg_in_command, NULL, 0x30861900);
     bypass_test(ftdi, DITEM( RESET_TO_RESET));
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
@@ -684,7 +684,7 @@ int main(int argc, char **argv)
               SEND_IMMEDIATE))) != 0xf5a9)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command);
+    read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command, 0xf0fe7910);
     ftdi_deinit(ftdi);
     //execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
     return 0;
