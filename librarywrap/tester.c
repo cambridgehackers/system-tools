@@ -89,7 +89,6 @@ struct ftdi_context *init_ftdi(const char *serialno)
         exit(-1);
     }
     ftdi_usb_open_dev(ftdi, curdev->dev);
-    ftdi_usb_reset(ftdi);
     ftdi_list_free(&devlist);
 
 #if 0
@@ -108,7 +107,6 @@ struct ftdi_context *init_ftdi(const char *serialno)
     /*
      * Generic initialization of libftdi
      */
-    ftdi_set_baudrate(ftdi, 9600);
     ftdi_set_latency_timer(ftdi, 255);
     ftdi_set_bitmode(ftdi, 0, 0);
     ftdi_set_bitmode(ftdi, 0, 2);
