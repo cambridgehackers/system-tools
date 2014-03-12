@@ -43,6 +43,24 @@
 #include "jcaftdi.c"
 #endif
 
+static void memdump(uint8_t *p, int len, char *title)
+{
+int i;
+
+    i = 0;
+    while (len > 0) {
+        if (!(i & 0xf)) {
+            if (i > 0)
+                printf("\n");
+            printf("%s: ",title);
+        }
+        printf("%02x ", *p++);
+        i++;
+        len--;
+    }
+    printf("\n");
+}
+
 /*
  * Generic FTDI initialization
  */
@@ -96,25 +114,31 @@ struct ftdi_context *init_ftdi(const char *serialno)
     ftdi_set_bitmode(ftdi, 0, 0);
     ftdi_set_bitmode(ftdi, 0, 2);
     ftdi_usb_purge_buffers(ftdi);
-    ftdi_usb_purge_rx_buffer(ftdi);
-    ftdi_usb_purge_tx_buffer(ftdi);
 
     /*
      * Generic command synchronization with ftdi chip
      */
-    static uint8_t errorcode_fa[] = { 0xfa };
+    static uint8_t errorcode_aa[] = { 0xfa, 0xaa };
+    static uint8_t errorcode_ab[] = { 0xfa, 0xab };
+uint8_t retcode[2];
     for (i = 0; i < 4; i++) {
         static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
         ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
-        ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
-        static uint8_t readdata1z[] = { 0xaa };
-        ftdi_read_data(ftdi, readdata1z, sizeof(readdata1z));
+        ftdi_read_data(ftdi, retcode, sizeof(retcode));
+if (memcmp(retcode, errorcode_aa, sizeof(errorcode_aa)))
+memdump(retcode, sizeof(retcode), "RETaa");
+        //ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
+        //static uint8_t readdata1z[] = { 0xaa };
+        //ftdi_read_data(ftdi, readdata1z, sizeof(readdata1z));
     }
     static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
     ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
-    ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
-    static uint8_t readdata2z[] = { 0xab };
-    ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
+        ftdi_read_data(ftdi, retcode, sizeof(retcode));
+if (memcmp(retcode, errorcode_ab, sizeof(errorcode_ab)))
+memdump(retcode, sizeof(retcode), "RETab");
+    //ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
+    //static uint8_t readdata2z[] = { 0xab };
+    //ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
     return ftdi;
 }
 
@@ -189,24 +213,6 @@ struct ftdi_context *init_ftdi(const char *serialno)
      IDLE_TO_SHIFT_IR,                            \
      DATAWBIT | (READA), 0x04, M(A),                 \
      SHIFT_TO_UPDATE_TO_IDLE((READA), ((A) & 0x100)>>1)
-
-static void memdump(uint8_t *p, int len, char *title)
-{
-int i;
-
-    i = 0;
-    while (len > 0) {
-        if (!(i & 0xf)) {
-            if (i > 0)
-                printf("\n");
-            printf("%s: ",title);
-        }
-        printf("%02x ", *p++);
-        i++;
-        len--;
-    }
-    printf("\n");
-}
 
 static uint8_t *catlist(uint8_t *arg[])
 {
