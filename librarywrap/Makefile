@@ -1,5 +1,5 @@
 
-CFLAGS=-Wall -fPIC -I/usr/local/include -g
+CFLAGS=-Wall -fPIC -I/usr/local/include -I/usr/include/libusb-1.0 -g
 # -ldl
 
 %.so: %.o
@@ -7,4 +7,4 @@ CFLAGS=-Wall -fPIC -I/usr/local/include -g
 #/usr/lib32/libdl.a -o $@
 
 tester: tester.o ftdiwrap.o Makefile
-	gcc -g -o tester tester.o ftdiwrap.o -ldl -lpthread
+	gcc -g -o tester tester.o ftdiwrap.o -ldl -lpthread -lusb-1.0

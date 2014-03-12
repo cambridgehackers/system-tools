@@ -37,12 +37,16 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
+#if 1
 #include "ftdi_reference.h"
+#else
+#include "jcaftdi.c"
+#endif
 
 /*
  * Generic FTDI initialization
  */
-struct ftdi_context *init_ftdi(void)
+struct ftdi_context *init_ftdi(const char *serialno)
 {
     struct ftdi_device_list *devlist, *curdev;
     char serial[64], manuf[64], desc[128];
@@ -55,13 +59,23 @@ struct ftdi_context *init_ftdi(void)
     ftdi_init(ftdi);
     ftdi_usb_find_all(ftdi, &devlist, 0x0, 0x0);
     curdev = devlist;
-    ftdi_usb_get_strings(ftdi, curdev->dev, manuf, sizeof(manuf),
-        desc, sizeof(desc), serial, sizeof(serial));
-    printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
+    while(curdev) {
+        ftdi_usb_get_strings(ftdi, curdev->dev, manuf, sizeof(manuf),
+            desc, sizeof(desc), serial, sizeof(serial));
+        printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
+        if (!serialno || !strcmp(serialno, serial))
+            break;
+        curdev = curdev->next;
+    }
+    if (!curdev) {
+        printf("Can't find usable usb interface\n");
+        exit(-1);
+    }
     ftdi_usb_open_dev(ftdi, curdev->dev);
     ftdi_usb_reset(ftdi);
     ftdi_list_free(&devlist);
 
+#if 0
     /*
      * Identify JTAG interface chip version
      */
@@ -72,6 +86,7 @@ struct ftdi_context *init_ftdi(void)
     ftdi_get_eeprom_value(ftdi, CHIP_TYPE, &eeprom_val);
     printf("[%s] CHIP_TYPE %x\n", __FUNCTION__, eeprom_val);
     ftdi_get_eeprom_buf(ftdi, fbuf, sizeof(fbuf));
+#endif
 
     /*
      * Generic initialization of libftdi
@@ -276,8 +291,12 @@ static uint8_t *check_read_data(struct ftdi_context *ftdi, uint8_t *buf)
 static uint16_t fetch16(struct ftdi_context *ftdi, uint8_t *req)
 {
     write_data(ftdi, req+1, req[0]);
+#if 1
     uint8_t *rdata = read_data(ftdi, sizeof(uint16_t));
     return rdata[0] | (rdata[1] << 8);
+#else
+    return read_data_int(ftdi, 2);
+#endif
 }
 
 static uint64_t fetch40(struct ftdi_context *ftdi, uint8_t *req)
@@ -516,7 +535,7 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
     return read_data_int(ftdi, 5);
 }
 
-static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency)
+static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, uint32_t clock_frequency)
 {
     struct ftdi_context *ftdi;
     int i;
@@ -525,7 +544,7 @@ static struct ftdi_context *initialize(uint32_t idcode, uint32_t clock_frequency
     /*
      * Initialize FTDI chip and GPIO pins
      */
-    ftdi = init_ftdi();   /* generic initialization */
+    ftdi = init_ftdi(serialno);   /* generic initialization */
     uint8_t initialize_sequence[] = {
          LOOPBACK_END, // Disconnect TDI/DO from loopback
          DIS_DIV_5, // Disable clk divide by 5
@@ -569,15 +588,20 @@ int main(int argc, char **argv)
     uint32_t idcode;
     uint16_t ret16;
     uint64_t ret40;
-    int i;
+    int i = 1;
     int inputfd = 0;   /* default input for '-' is stdin */
+    const char *serialno = NULL;
 
-    if (argc != 2) {
+    if (argc < 2) {
         printf("tester <filename>\n");
         exit(1);
     }
-    if (strcmp(argv[1], "-")) {
-        inputfd = open(argv[1], O_RDONLY);
+    if (!strcmp(argv[i], "-s")) {
+        serialno = argv[++i];
+        i++;
+    }
+    if (strcmp(argv[i], "-")) {
+        inputfd = open(argv[i], O_RDONLY);
         if (inputfd == -1) {
             printf("Unable to open file '%s'\n", argv[1]);
             exit(-1);
@@ -587,7 +611,7 @@ int main(int argc, char **argv)
     read(inputfd, &idcode, sizeof(idcode));
     idcode = (M(idcode) << 24) | (M(idcode >> 8) << 16) | (M(idcode >> 16) << 8) | M(idcode >> 24);
     lseek(inputfd, 0, SEEK_SET);
-    ftdi = initialize(idcode, CLOCK_FREQUENCY);
+    ftdi = initialize(idcode, serialno, CLOCK_FREQUENCY);
 
     if ((ret40 = fetch40(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
