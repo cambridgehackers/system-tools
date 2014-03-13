@@ -100,6 +100,7 @@ int i;
     }
     fprintf(logfile, "\n");
 }
+static int started = 0;
 static void formatwrite(int submit, const unsigned char *p, int len, const char *title)
 {
    static unsigned char bitswap[256];
@@ -131,15 +132,21 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
         }
         if (!submit || accum < ACCUM_LIMIT)
             memdump(pstart, plen, header);
-        if (submit && p[0] == 0x1b && p[1] == 6)
+        if (started && p[0] == 0x1b && p[1] == 6)
             write(datafile_fd, &bitswap[p[2]], 1);
         p += plen;
         len -= plen;
         if (ch == 0x19 || ch == 0x3d) {
             unsigned tlen = (pstart[2] << 8 | pstart[1]) + 1;
-            if (!submit)
+if (tlen > 1500) {
+    started = 1;
+}
+else
+    started = 0;    // shutdown before final writes
+            if (!started)
                 memdump(p, tlen, header_data);
-            if (submit && tlen > 4) {
+            //if (submit && tlen > 4) 
+            else {
                 int i;
                 for (i = 0; once && i < sizeof(bitswap); i++)
                     bitswap[i] = ((i &    1) << 7) | ((i &    2) << 5)
@@ -165,13 +172,8 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
 static char *writedata(int submit, const unsigned char *buf, int size)
 {
     static char tempbuf[200];
-static int started = 0;
         int ind = -1;
         int i = 0;
-if (size > 1000)
-    started = 1;
-else
-    started = 0;    // shutdown before final writes
         if ((submit && started) || logall)
             formatwrite(submit, buf, size, "WRITE");
         else {
@@ -193,6 +195,8 @@ else
         }
     accum += size;
     sprintf(tempbuf, "%p, %d", buf, size);
+if (size < 1000)
+    started = 0;    // shutdown before final writes
     return tempbuf;
 }
 static char *readdata(const unsigned char *buf, int size)
