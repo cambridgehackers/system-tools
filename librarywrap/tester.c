@@ -25,6 +25,7 @@
 //     http://www.ftdichip.com/Documents/AppNotes/AN2232C-01_MPSSE_Cmnd.pdf
 // Xilinx Series7 Configuation documented at:
 //     ug470_7Series_Config.pdf
+#define USE_LIBFTDI
 
 #include <stdio.h>
 #include <string.h>
@@ -44,16 +45,16 @@
 #define USB_CHUNKSIZE   4096
 #define USB_INDEX                     0
 
-#define SIO_RESET                     0 /* Reset the port */
-#define SIO_RESET_PURGE_RX            1
-#define SIO_RESET_PURGE_TX            2
-#define SIO_SET_BAUD_RATE             3 /* Set baud rate */
-#define SIO_SET_LATENCY_TIMER_REQUEST 9
-#define SIO_SET_BITMODE_REQUEST       11
+#define USBSIO_RESET                     0 /* Reset the port */
+#define USBSIO_RESET_PURGE_RX            1
+#define USBSIO_RESET_PURGE_TX            2
+#define USBSIO_SET_BAUD_RATE             3 /* Set baud rate */
+#define USBSIO_SET_LATENCY_TIMER_REQUEST 9
+#define USBSIO_SET_BITMODE_REQUEST       11
 
 static libusb_device_handle *usbhandle = NULL;
 static unsigned char usbreadbuffer[USB_CHUNKSIZE];
-#if 0
+#ifdef USE_LIBFTDI
 #include "ftdi_reference.h"
 #else
 #define MPSSE_WRITE_NEG 0x01   /* Write TDI/DO on negative TCK/SK edge*/
@@ -66,34 +67,26 @@ static unsigned char usbreadbuffer[USB_CHUNKSIZE];
 #define SET_BITS_LOW   0x80
 #define SET_BITS_HIGH  0x82
 #define LOOPBACK_END   0x85
-//#define TCK_DIVISOR    0x86
+#define TCK_DIVISOR    0x86
 #define DIS_DIV_5       0x8a
 #define CLK_BYTES       0x8f
-//#define DIV_VALUE(rate) (rate > 6000000)?0:((6000000/rate -1) > 0xffff)? 0xffff: (6000000/rate -1)
 #define SEND_IMMEDIATE 0x87
 
 struct ftdi_context {
 };
 struct ftdi_transfer_control {
 };
-static void ftdi_deinit(struct ftdi_context *ftdi)
-{
-}
-static int ftdi_transfer_data_done(struct ftdi_transfer_control *tc)
-{
-    return 0;
-}
+#define ftdi_deinit(A)
+#define ftdi_transfer_data_done(A)
+#define ftdi_set_usbdev(A,B)
+#define ftdi_write_data_submit(A, B, C) (ftdi_write_data((A), (B), (C)), NULL)
+#define ftdi_read_data_submit(A, B, C) (ftdi_read_data((A), (B), (C)), NULL)
 static int ftdi_write_data(struct ftdi_context *ftdi, const unsigned char *buf, int size)
 {
     int actual_length;
     if (libusb_bulk_transfer(usbhandle, ENDPOINT_IN, (unsigned char *)buf, size, &actual_length, USB_TIMEOUT) < 0)
         printf( "usb bulk write failed");
     return actual_length;
-}
-static struct ftdi_transfer_control *ftdi_write_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
-{
-    ftdi_write_data(ftdi, buf, size);
-    return NULL;
 }
 static int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int size)
 {
@@ -112,18 +105,11 @@ static int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int siz
         }
     return offset;
 }
-static struct ftdi_transfer_control *ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
-{
-    ftdi_read_data(ftdi, buf, size);
-    return NULL;
-}
 static struct ftdi_context *ftdi_new(void)
 {
+static struct ftdi_context foo;
 printf("[%s:%d] funky version\n", __FUNCTION__, __LINE__);
-    return (struct ftdi_context *)calloc(1, sizeof(struct ftdi_context));
-}
-static void ftdi_set_usbdev (struct ftdi_context *ftdi, libusb_device_handle *usb)
-{
+    return &foo;
 }
 #endif
 
@@ -154,32 +140,30 @@ struct ftdi_context *init_ftdi(void)
 {
 int i;
     struct ftdi_context *ftdi = ftdi_new();
+#ifdef USE_LIBFTDI
     ftdi_set_usbdev(ftdi, usbhandle);
+    ftdi->usb_ctx = usb_context;
+    ftdi->max_packet_size = 512; //5000;
+#endif
 
     /*
      * Generic command synchronization with ftdi chip
      */
     static uint8_t errorcode_aa[] = { 0xfa, 0xaa };
     static uint8_t errorcode_ab[] = { 0xfa, 0xab };
-uint8_t retcode[2];
+    uint8_t retcode[2];
     for (i = 0; i < 4; i++) {
         static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
         ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
         ftdi_read_data(ftdi, retcode, sizeof(retcode));
-if (memcmp(retcode, errorcode_aa, sizeof(errorcode_aa)))
-memdump(retcode, sizeof(retcode), "RETaa");
-        //ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
-        //static uint8_t readdata1z[] = { 0xaa };
-        //ftdi_read_data(ftdi, readdata1z, sizeof(readdata1z));
+        if (memcmp(retcode, errorcode_aa, sizeof(errorcode_aa)))
+            memdump(retcode, sizeof(retcode), "RETaa");
     }
     static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
     ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
         ftdi_read_data(ftdi, retcode, sizeof(retcode));
-if (memcmp(retcode, errorcode_ab, sizeof(errorcode_ab)))
-memdump(retcode, sizeof(retcode), "RETab");
-    //ftdi_read_data(ftdi, errorcode_fa, sizeof(errorcode_fa));
-    //static uint8_t readdata2z[] = { 0xab };
-    //ftdi_read_data(ftdi, readdata2z, sizeof(readdata2z));
+    if (memcmp(retcode, errorcode_ab, sizeof(errorcode_ab)))
+        memdump(retcode, sizeof(retcode), "RETab");
     return ftdi;
 }
 
@@ -585,11 +569,11 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
 static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, uint32_t clock_frequency)
 {
     struct ftdi_context *ftdi;
-#define SET_CLOCK_DIVISOR    0x86, INT16(30000000/clock_frequency - 1)
+#define SET_CLOCK_DIVISOR    TCK_DIVISOR, INT16(30000000/clock_frequency - 1)
     int cfg, type = 0, i = 0, baudrate = 9600;
     static const char frac_code[8] = {0, 3, 2, 4, 1, 5, 6, 7};
     int best_divisor = 12000000*8 / baudrate;
-    unsigned long encoded_divisor = (best_divisor >> 3) | (frac_code[best_divisor & 0x7] << 14);
+    unsigned long encdiv = (best_divisor >> 3) | (frac_code[best_divisor & 0x7] << 14);
     libusb_device **device_list, *dev, *usbdev = NULL;
     struct libusb_device_descriptor desc;
     struct libusb_config_descriptor *config_descrip;
@@ -628,19 +612,20 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
     int configv = config_descrip->bConfigurationValue;
     libusb_free_config_descriptor (config_descrip);
     libusb_detach_kernel_driver(usbhandle, 0);
-#define USB_OUT_REQTYPE (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT)
+#define USBCTRL(A,B,C) \
+     libusb_control_transfer(usbhandle, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT,\
+           (A), (B), (C) | USB_INDEX, NULL, 0, USB_TIMEOUT)
+
     if (libusb_get_configuration (usbhandle, &cfg) < 0
      || (desc.bNumConfigurations > 0 && cfg != configv && libusb_set_configuration(usbhandle, configv) < 0)
      || libusb_claim_interface(usbhandle, 0) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET, SIO_RESET, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BAUD_RATE,
-        (encoded_divisor | 0x20000) & 0xFFFF, ((encoded_divisor >> 8) & 0xFF00) | USB_INDEX,
-        NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_LATENCY_TIMER_REQUEST, 255, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 0, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 2 << 8, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET, SIO_RESET_PURGE_RX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET, SIO_RESET_PURGE_TX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0)
+     || USBCTRL(USBSIO_RESET, USBSIO_RESET, 0) < 0
+     || USBCTRL(USBSIO_SET_BAUD_RATE, (encdiv | 0x20000) & 0xFFFF, ((encdiv >> 8) & 0xFF00)) < 0
+     || USBCTRL(USBSIO_SET_LATENCY_TIMER_REQUEST, 255, 0) < 0
+     || USBCTRL(USBSIO_SET_BITMODE_REQUEST, 0, 0) < 0
+     || USBCTRL(USBSIO_SET_BITMODE_REQUEST, 2 << 8, 0) < 0
+     || USBCTRL(USBSIO_RESET, USBSIO_RESET_PURGE_RX, 0) < 0
+     || USBCTRL(USBSIO_RESET, USBSIO_RESET_PURGE_TX, 0) < 0)
         goto error;
     //(desc.bcdDevice == 0x700) //kc       TYPE_2232H
     //(desc.bcdDevice == 0x900) //zedboard TYPE_232H
@@ -788,8 +773,10 @@ int main(int argc, char **argv)
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command, 0xf0fe7910);
     ftdi_deinit(ftdi);
+#ifndef USE_LIBFTDI
     libusb_close (usbhandle);
     libusb_exit(usb_context);
+#endif
     //execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
     return 0;
 }
