@@ -5,28 +5,28 @@ WRAP: ftdi_deinit
     if (master_ftdi == ftdi)
         final_dump();
 WRAP: ftdi_eeprom_decode
-    fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), verbose);
+    //fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), verbose);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_free
     fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 WRAP: ftdi_get_eeprom_buf
-    fprintf(logfile, "%s(%s, %p, %d);\n", __FUNCTION__, translate_context(ftdi), buf, size);
+    //fprintf(logfile, "%s(%s, %p, %d);\n", __FUNCTION__, translate_context(ftdi), buf, size);
 POST:
     if (retval)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_get_eeprom_value
 //int ftdi_get_eeprom_value(struct ftdi_context *ftdi, enum ftdi_eeprom_value value_name, int* value)
-    fprintf(logfile, "%s(%s, %d, %p);\n", __FUNCTION__, translate_context(ftdi), value_name, value);
+    //fprintf(logfile, "%s(%s, %d, %p);\n", __FUNCTION__, translate_context(ftdi), value_name, value);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_list_free
 //void ftdi_list_free(struct ftdi_device_list **devlist)
-    fprintf(logfile, "%s(%p);\n", __FUNCTION__, devlist);
+    //fprintf(logfile, "%s(%p);\n", __FUNCTION__, devlist);
 WRAP: ftdi_new
-    fprintf(logfile, "//%s() starting\n", __FUNCTION__);
+    //fprintf(logfile, "//%s() starting\n", __FUNCTION__);
 POST:
     fprintf(logfile, "//%p\n%s = %s();\n", retval, translate_context(retval), __FUNCTION__);
     if (!master_ftdi)
@@ -36,7 +36,8 @@ POST:
 WRAP: ftdi_read_data
 //int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int size)
 POST:
-    fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), readdata(buf, size));
+    readdata(buf, size);
+    //fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), readdata(buf, size));
     if (retval != size)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_read_data_set_chunksize
@@ -53,96 +54,98 @@ POST:
     read_data_buffer = buf;
     read_data_len = size;
 WRAP: ftdi_read_eeprom
-    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+    //fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_set_baudrate
-    fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), baudrate);
+    //fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), baudrate);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_set_bitmode
-    fprintf(logfile, "%s(%s, 0x%x, 0x%x);\n", __FUNCTION__, translate_context(ftdi), bitmask, mode);
+    //fprintf(logfile, "%s(%s, 0x%x, 0x%x);\n", __FUNCTION__, translate_context(ftdi), bitmask, mode);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_set_interface
-    fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), interface);
+    //fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), interface);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_set_latency_timer
-    fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), latency);
+    //fprintf(logfile, "%s(%s, %d);\n", __FUNCTION__, translate_context(ftdi), latency);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_transfer_data_done
 POST:
     if (tc == read_data_submit_control) {
         if (retval != read_data_len)
             fprintf(logfile, "%s(%p) = %d\n", __FUNCTION__, tc, retval);
-        fprintf(logfile, "check_ftdi_read_data_submit(%s, %s);\n", translate_context(read_data_context), readdata(read_data_buffer, read_data_len));
+        readdata(read_data_buffer, read_data_len);
+        //fprintf(logfile, "check_ftdi_read_data_submit(%s, %s);\n", translate_context(read_data_context), readdata(read_data_buffer, read_data_len));
         read_data_submit_control = NULL;
     }
     else if (tc == write_data_submit_control) {
         write_data_submit_control = NULL;
-        if (retval != write_data_len)
-            fprintf(logfile, "%s(%p) = %d\n", __FUNCTION__, tc, retval);
+        //if (retval != write_data_len)
+            //fprintf(logfile, "%s(%p) = %d\n", __FUNCTION__, tc, retval);
     }
     else
         fprintf(logfile, "%s(%p) = %d\n", __FUNCTION__, tc, retval);
 WRAP: ftdi_usb_close
-    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+    //fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_find_all
 //int ftdi_usb_find_all(struct ftdi_context *ftdi, struct ftdi_device_list **devlist, int vendor, int product)
-    fprintf(logfile, "%s(%s, %p, 0x%x, 0x%x);\n", __FUNCTION__, translate_context(ftdi), devlist, vendor, product);
+    //fprintf(logfile, "%s(%s, %p, 0x%x, 0x%x);\n", __FUNCTION__, translate_context(ftdi), devlist, vendor, product);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_get_strings
 //int ftdi_usb_get_strings(struct ftdi_context *ftdi, struct libusb_device *dev, char * manufacturer, int mnf_len, char * description, int desc_len, char * serial, int serial_len)
-    fprintf(logfile, "%s(%s, %p, %s, %s, %s);\n", __FUNCTION__, translate_context(ftdi), dev,
-        translate_buffer(manufacturer, mnf_len), translate_buffer(description, desc_len), translate_buffer(serial, serial_len));
+    //fprintf(logfile, "%s(%s, %p, %s, %s, %s);\n", __FUNCTION__, translate_context(ftdi), dev,
+        //translate_buffer(manufacturer, mnf_len), translate_buffer(description, desc_len), translate_buffer(serial, serial_len));
 POST:
-    fprintf(logfile, "//%s: ret %d man=%s\n//      desc=%s\n//      serial=%s\n", __FUNCTION__, retval, manufacturer, description, serial);
+    //fprintf(logfile, "//%s: ret %d man=%s\n//      desc=%s\n//      serial=%s\n", __FUNCTION__, retval, manufacturer, description, serial);
 WRAP: ftdi_usb_open_dev
-    fprintf(logfile, "%s(%s, %p);\n", __FUNCTION__, translate_context(ftdi), dev);
+    //fprintf(logfile, "%s(%s, %p);\n", __FUNCTION__, translate_context(ftdi), dev);
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_purge_buffers
-    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+    //fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_purge_rx_buffer
-    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+    //fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
-    if (retval)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_purge_tx_buffer
-    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+    //fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
     if (retval)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_usb_reset
-    fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
+    //fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
 POST:
     if (retval)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_write_data
-    fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), writedata(0, buf, size));
+    writedata(0, buf, size);
+    //fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), writedata(0, buf, size));
 POST:
-    if (retval != size)
-        fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
+    //if (retval != size)
+        //fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_write_data_submit
 POST:
     char *p = writedata(1, buf, size);
-    if (accum < ACCUM_LIMIT)
-        fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), p);
+    //if (accum < ACCUM_LIMIT)
+        //fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), p);
     write_data_submit_control = retval;
     write_data_len = size;
