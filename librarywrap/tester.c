@@ -36,12 +36,98 @@
 #include <fcntl.h>
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
+#include <libusb.h>
 
+#define USB_TIMEOUT    5000
+#define ENDPOINT_IN     0x02
+#define ENDPOINT_OUT    0x81
+#define USB_CHUNKSIZE   4096
+#define USB_INDEX                     0
+
+#define SIO_RESET                     0 /* Reset the port */
+#define SIO_RESET_PURGE_RX            1
+#define SIO_RESET_PURGE_TX            2
+#define SIO_SET_BAUD_RATE             3 /* Set baud rate */
+#define SIO_SET_LATENCY_TIMER_REQUEST 9
+#define SIO_SET_BITMODE_REQUEST       11
+
+static libusb_device_handle *usbhandle = NULL;
+static unsigned char usbreadbuffer[USB_CHUNKSIZE];
 #if 0
 #include "ftdi_reference.h"
 #else
-#include "jcaftdi.c"
+#define MPSSE_WRITE_NEG 0x01   /* Write TDI/DO on negative TCK/SK edge*/
+#define MPSSE_BITMODE   0x02   /* Write bits, not bytes */
+#define MPSSE_READ_NEG  0x04   /* Sample TDO/DI on negative TCK/SK edge */
+#define MPSSE_LSB       0x08   /* LSB first */
+#define MPSSE_DO_WRITE  0x10   /* Write TDI/DO */
+#define MPSSE_DO_READ   0x20   /* Read TDO/DI */
+#define MPSSE_WRITE_TMS 0x40   /* Write TMS/CS */
+#define SET_BITS_LOW   0x80
+#define SET_BITS_HIGH  0x82
+#define LOOPBACK_END   0x85
+//#define TCK_DIVISOR    0x86
+#define DIS_DIV_5       0x8a
+#define CLK_BYTES       0x8f
+//#define DIV_VALUE(rate) (rate > 6000000)?0:((6000000/rate -1) > 0xffff)? 0xffff: (6000000/rate -1)
+#define SEND_IMMEDIATE 0x87
+
+struct ftdi_context {
+};
+struct ftdi_transfer_control {
+};
+static void ftdi_deinit(struct ftdi_context *ftdi)
+{
+}
+static int ftdi_transfer_data_done(struct ftdi_transfer_control *tc)
+{
+    return 0;
+}
+static int ftdi_write_data(struct ftdi_context *ftdi, const unsigned char *buf, int size)
+{
+    int actual_length;
+    if (libusb_bulk_transfer(usbhandle, ENDPOINT_IN, (unsigned char *)buf, size, &actual_length, USB_TIMEOUT) < 0)
+        printf( "usb bulk write failed");
+    return actual_length;
+}
+static struct ftdi_transfer_control *ftdi_write_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
+{
+    ftdi_write_data(ftdi, buf, size);
+    return NULL;
+}
+static int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int size)
+{
+    int offset = 0, ret;
+    int actual_length = 1;
+    do {
+        ret = libusb_bulk_transfer (usbhandle, ENDPOINT_OUT, usbreadbuffer, USB_CHUNKSIZE, &actual_length, USB_TIMEOUT);
+        if (ret < 0)
+            printf( "usb bulk read failed");
+        actual_length -= 2;
+    } while (actual_length == 0);
+    memcpy (buf, usbreadbuffer+2, actual_length);
+    if (actual_length != size) {
+        printf("[%s:%d] bozo actual_length %d size %d\n", __FUNCTION__, __LINE__, actual_length, size);
+        exit(-1);
+        }
+    return offset;
+}
+static struct ftdi_transfer_control *ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
+{
+    ftdi_read_data(ftdi, buf, size);
+    return NULL;
+}
+static struct ftdi_context *ftdi_new(void)
+{
+printf("[%s:%d] funky version\n", __FUNCTION__, __LINE__);
+    return (struct ftdi_context *)calloc(1, sizeof(struct ftdi_context));
+}
+static void ftdi_set_usbdev (struct ftdi_context *ftdi, libusb_device_handle *usb)
+{
+}
 #endif
+
+static struct libusb_context *usb_context;
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -64,11 +150,10 @@ int i;
 /*
  * Generic FTDI initialization
  */
-struct ftdi_context *init_ftdi(libusb_device_handle *usbhandle)
+struct ftdi_context *init_ftdi(void)
 {
 int i;
     struct ftdi_context *ftdi = ftdi_new();
-
     ftdi_set_usbdev(ftdi, usbhandle);
 
     /*
@@ -501,22 +586,22 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
 {
     struct ftdi_context *ftdi;
 #define SET_CLOCK_DIVISOR    0x86, INT16(30000000/clock_frequency - 1)
-    int cfg, cfg0, type = 0, i = 0, baudrate = 9600;
+    int cfg, type = 0, i = 0, baudrate = 9600;
     static const char frac_code[8] = {0, 3, 2, 4, 1, 5, 6, 7};
     int best_divisor = 12000000*8 / baudrate;
     unsigned long encoded_divisor = (best_divisor >> 3) | (frac_code[best_divisor & 0x7] << 14);
-    struct libusb_context *usb_ctx;
     libusb_device **device_list, *dev, *usbdev = NULL;
     struct libusb_device_descriptor desc;
-    struct libusb_config_descriptor *config0;
+    struct libusb_config_descriptor *config_descrip;
 
     /*
      * Locate USB interface for JTAG
      */
-    libusb_device_handle *usbhandle = NULL;
-    if (libusb_init(&usb_ctx) < 0
-     || libusb_get_device_list(usb_ctx, &device_list) < 0)
-        ftdi_error_return(NULL, "libusb_get_device_list() failed");
+    if (libusb_init(&usb_context) < 0
+     || libusb_get_device_list(usb_context, &device_list) < 0) {
+        printf("libusb_init failed\n");
+        exit(-1);
+    }
     while ((dev = device_list[i++]) ) {
         if (libusb_get_device_descriptor(dev, &desc) < 0)
             break;
@@ -524,9 +609,8 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
          || desc.idProduct == 0x6011 || desc.idProduct == 0x6014)) {
             unsigned char serial[64], manuf[64], descrip[128];
             libusb_ref_device(dev);
-            if (libusb_open(dev, &usbhandle) < 0)
-                ftdi_error_return(NULL, "libusb_open() failed");
-            if (libusb_get_string_descriptor_ascii(usbhandle, desc.iManufacturer, manuf, sizeof(manuf)) < 0
+            if (libusb_open(dev, &usbhandle) < 0
+             || libusb_get_string_descriptor_ascii(usbhandle, desc.iManufacturer, manuf, sizeof(manuf)) < 0
              || libusb_get_string_descriptor_ascii(usbhandle, desc.iProduct, descrip, sizeof(descrip)) < 0
              || libusb_get_string_descriptor_ascii(usbhandle, desc.iSerialNumber, serial, sizeof(serial)) < 0)
                 goto error;
@@ -539,37 +623,32 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
         }
     }
     libusb_free_device_list(device_list,1);
-    if (!usbdev) {
-        printf("Can't find usable usb interface\n");
-        exit(-1);
-    }
-    if (libusb_get_config_descriptor(dev, 0, &config0) < 0)
+    if (!usbdev || libusb_get_config_descriptor(usbdev, 0, &config_descrip) < 0)
         goto error;
-    cfg0 = config0->bConfigurationValue;
-    libusb_free_config_descriptor (config0);
+    int configv = config_descrip->bConfigurationValue;
+    libusb_free_config_descriptor (config_descrip);
     libusb_detach_kernel_driver(usbhandle, 0);
+#define USB_OUT_REQTYPE (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT)
     if (libusb_get_configuration (usbhandle, &cfg) < 0
-     || (desc.bNumConfigurations > 0 && cfg != cfg0 && libusb_set_configuration(usbhandle, cfg0) < 0)
+     || (desc.bNumConfigurations > 0 && cfg != configv && libusb_set_configuration(usbhandle, configv) < 0)
      || libusb_claim_interface(usbhandle, 0) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_SIO, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0)
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET, SIO_RESET, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BAUD_RATE,
+        (encoded_divisor | 0x20000) & 0xFFFF, ((encoded_divisor >> 8) & 0xFF00) | USB_INDEX,
+        NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_LATENCY_TIMER_REQUEST, 255, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 0, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 2 << 8, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET, SIO_RESET_PURGE_RX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET, SIO_RESET_PURGE_TX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0)
         goto error;
     //(desc.bcdDevice == 0x700) //kc       TYPE_2232H
     //(desc.bcdDevice == 0x900) //zedboard TYPE_232H
 printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type);
-    if (libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BAUDRATE_REQUEST,
-        (encoded_divisor | 0x20000) & 0xFFFF, ((encoded_divisor >> 8) & 0xFF00) | USB_INDEX,
-        NULL, 0, USB_TIMEOUT) < 0)
-        goto error;
-    if (libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_LATENCY_TIMER_REQUEST, 255, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 0 | (0 << 8), USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 0 | (2 << 8), USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_PURGE_RX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
-     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_PURGE_TX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0)
-        goto error;
     /*
      * Initialize FTDI chip and GPIO pins
      */
-    ftdi = init_ftdi(usbhandle);   /* generic initialization */
+    ftdi = init_ftdi();   /* generic initialization */
     uint8_t initialize_sequence[] = {
          LOOPBACK_END, // Disconnect TDI/DO from loopback
          DIS_DIV_5, // Disable clk divide by 5
@@ -606,7 +685,7 @@ printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type)
     return ftdi;
 error:
     libusb_close (usbhandle);
-    printf("open usb failed\n");
+    printf("Can't find usable usb interface\n");
     exit(-1);
 }
 
@@ -709,6 +788,8 @@ int main(int argc, char **argv)
     bypass_test(ftdi, DITEM( IDLE_TO_RESET));
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command, 0xf0fe7910);
     ftdi_deinit(ftdi);
+    libusb_close (usbhandle);
+    libusb_exit(usb_context);
     //execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
     return 0;
 }
