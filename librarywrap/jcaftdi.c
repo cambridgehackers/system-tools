@@ -76,28 +76,13 @@ struct ftdi_device_list {
         fprintf(stderr, str);          \
         return code;                       \
    } while(0);
-static void ftdi_usb_close_internal (struct ftdi_context *ftdi)
-{
-    if (ftdi && ftdi->usb_dev) {
-        libusb_close (ftdi->usb_dev);
-        ftdi->usb_dev = NULL;
-    }
-}
-static void ftdi_deinit(struct ftdi_context *ftdi)
-{
-    if (ftdi == NULL)
-        return;
-    ftdi_usb_close_internal (ftdi);
-    if (ftdi->usb_ctx) {
-        libusb_exit(ftdi->usb_ctx);
-        ftdi->usb_ctx = NULL;
-    }
-}
 static int ftdi_usb_find_all(struct ftdi_context *ftdi, struct ftdi_device_list **devlist, int vendor, int product)
 {
     struct ftdi_device_list **curdev;
     libusb_device *dev;
     libusb_device **devs;
+    struct libusb_device_descriptor desc;
+
     int count = 0;
     int i = 0;
     if (libusb_get_device_list(ftdi->usb_ctx, &devs) < 0)
@@ -105,14 +90,10 @@ static int ftdi_usb_find_all(struct ftdi_context *ftdi, struct ftdi_device_list 
     curdev = devlist;
     *curdev = NULL;
     while ((dev = devs[i++]) ) {
-        struct libusb_device_descriptor desc;
         if (libusb_get_device_descriptor(dev, &desc) < 0)
             ftdi_error_return_free_device_list(-6, "libusb_get_device_descriptor() failed", devs);
-        if (((vendor != 0 && product != 0) &&
-                desc.idVendor == vendor && desc.idProduct == product) ||
-                ((vendor == 0 && product == 0) &&
-                 (desc.idVendor == 0x403) && (desc.idProduct == 0x6001 || desc.idProduct == 0x6010
-                                              || desc.idProduct == 0x6011 || desc.idProduct == 0x6014))) {
+        if ( desc.idVendor == 0x403 && (desc.idProduct == 0x6001 || desc.idProduct == 0x6010
+                     || desc.idProduct == 0x6011 || desc.idProduct == 0x6014)) {
             *curdev = (struct ftdi_device_list*)malloc(sizeof(struct ftdi_device_list));
             if (!*curdev)
                 ftdi_error_return_free_device_list(-3, "out of memory", devs);
@@ -137,33 +118,38 @@ static void ftdi_list_free(struct ftdi_device_list **devlist)
     }
     *devlist = NULL;
 }
+static void ftdi_usb_close_internal (struct ftdi_context *ftdi)
+{
+    if (ftdi && ftdi->usb_dev) {
+        libusb_close (ftdi->usb_dev);
+        ftdi->usb_dev = NULL;
+    }
+}
+static void ftdi_deinit(struct ftdi_context *ftdi)
+{
+    if (ftdi == NULL)
+        return;
+    ftdi_usb_close_internal (ftdi);
+    if (ftdi->usb_ctx) {
+        libusb_exit(ftdi->usb_ctx);
+        ftdi->usb_ctx = NULL;
+    }
+}
 static int ftdi_usb_get_strings(struct ftdi_context * ftdi, struct libusb_device * dev,
-                         char * manufacturer, int mnf_len, char * description, int desc_len, char * serial, int serial_len)
+     char * manufacturer, int mnf_len, char * description, int desc_len, char * serial, int serial_len)
 {
     struct libusb_device_descriptor desc;
     if (libusb_open(dev, &ftdi->usb_dev) < 0)
         ftdi_error_return(-4, "libusb_open() failed");
     if (libusb_get_device_descriptor(dev, &desc) < 0)
         ftdi_error_return(-11, "libusb_get_device_descriptor() failed");
-    if (libusb_get_string_descriptor_ascii(ftdi->usb_dev, desc.iManufacturer, (unsigned char *)manufacturer, mnf_len) < 0) {
-        ftdi_usb_close_internal (ftdi);
-        ftdi_error_return(-7, "libusb_get_string_descriptor_ascii() failed");
-    }
-    if (libusb_get_string_descriptor_ascii(ftdi->usb_dev, desc.iProduct, (unsigned char *)description, desc_len) < 0) {
-        ftdi_usb_close_internal (ftdi);
-        ftdi_error_return(-8, "libusb_get_string_descriptor_ascii() failed");
-    }
-    if (libusb_get_string_descriptor_ascii(ftdi->usb_dev, desc.iSerialNumber, (unsigned char *)serial, serial_len) < 0) {
+    if (libusb_get_string_descriptor_ascii(ftdi->usb_dev, desc.iManufacturer, (unsigned char *)manufacturer, mnf_len) < 0
+     || libusb_get_string_descriptor_ascii(ftdi->usb_dev, desc.iProduct, (unsigned char *)description, desc_len) < 0
+     || libusb_get_string_descriptor_ascii(ftdi->usb_dev, desc.iSerialNumber, (unsigned char *)serial, serial_len) < 0) {
         ftdi_usb_close_internal (ftdi);
         ftdi_error_return(-9, "libusb_get_string_descriptor_ascii() failed");
     }
     ftdi_usb_close_internal (ftdi);
-    return 0;
-}
-static int ftdi_usb_reset(struct ftdi_context *ftdi)
-{
-    if (libusb_control_transfer(ftdi->usb_dev, FTDI_DEVICE_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_SIO, USB_INDEX, NULL, 0, WRITE_TIMEOUT) < 0)
-        ftdi_error_return(-1,"FTDI reset failed");
     return 0;
 }
 static int ftdi_usb_purge_buffers(struct ftdi_context *ftdi)
@@ -176,10 +162,9 @@ static int ftdi_usb_purge_buffers(struct ftdi_context *ftdi)
 }
 static int ftdi_set_baudrate(struct ftdi_context *ftdi, int baudrate)
 {
-    unsigned long encoded_divisor;
     static const char frac_code[8] = {0, 3, 2, 4, 1, 5, 6, 7};
     int best_divisor = 12000000*8 / baudrate;
-    encoded_divisor = (best_divisor >> 3) | (frac_code[best_divisor & 0x7] << 14);
+    unsigned long encoded_divisor = (best_divisor >> 3) | (frac_code[best_divisor & 0x7] << 14);
     if (libusb_control_transfer(ftdi->usb_dev, FTDI_DEVICE_OUT_REQTYPE, SIO_SET_BAUDRATE_REQUEST, (encoded_divisor | 0x20000) & 0xFFFF,
         ((encoded_divisor >> 8) & 0xFF00) | USB_INDEX, NULL, 0, WRITE_TIMEOUT) < 0)
         ftdi_error_return (-2, "Setting new baudrate failed");
@@ -226,9 +211,7 @@ static struct ftdi_transfer_control *ftdi_read_data_submit(struct ftdi_context *
 }
 static int ftdi_set_bitmode(struct ftdi_context *ftdi, unsigned char bitmask, unsigned char mode)
 {
-    unsigned short usb_val = bitmask; // low byte: bitmask
-    usb_val |= (mode << 8);
-    if (libusb_control_transfer(ftdi->usb_dev, FTDI_DEVICE_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, usb_val, USB_INDEX, NULL, 0, WRITE_TIMEOUT) < 0)
+    if (libusb_control_transfer(ftdi->usb_dev, FTDI_DEVICE_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, bitmask | (mode << 8), USB_INDEX, NULL, 0, WRITE_TIMEOUT) < 0)
         ftdi_error_return(-1, "unable to configure mode");
     return 0;
 }
@@ -243,31 +226,21 @@ static int ftdi_usb_open_dev(struct ftdi_context *ftdi, libusb_device *dev)
     struct libusb_device_descriptor desc;
     struct libusb_config_descriptor *config0;
     int cfg, cfg0;
-    if (libusb_open(dev, &ftdi->usb_dev) < 0)
-        ftdi_error_return(-4, "libusb_open() failed");
-    if (libusb_get_device_descriptor(dev, &desc) < 0)
-        ftdi_error_return(-9, "libusb_get_device_descriptor() failed");
-    if (libusb_get_config_descriptor(dev, 0, &config0) < 0)
+
+    if (libusb_open(dev, &ftdi->usb_dev) < 0
+     || libusb_get_device_descriptor(dev, &desc) < 0
+     || libusb_get_config_descriptor(dev, 0, &config0) < 0)
         ftdi_error_return(-10, "libusb_get_config_descriptor() failed");
     cfg0 = config0->bConfigurationValue;
     libusb_free_config_descriptor (config0);
     libusb_detach_kernel_driver(ftdi->usb_dev, 0);
     if (libusb_get_configuration (ftdi->usb_dev, &cfg) < 0)
         ftdi_error_return(-12, "libusb_get_configuration () failed");
-    if (desc.bNumConfigurations > 0 && cfg != cfg0) {
-        if (libusb_set_configuration(ftdi->usb_dev, cfg0) < 0) {
-            ftdi_usb_close_internal (ftdi);
-                ftdi_error_return(-8, "inappropriate permissions on device!");
-        }
-    }
-    if (libusb_claim_interface(ftdi->usb_dev, 0) < 0) {
-        ftdi_usb_close_internal (ftdi);
-            ftdi_error_return(-8, "inappropriate permissions on device!");
-    }
-    if (ftdi_usb_reset (ftdi) != 0) {
-        ftdi_usb_close_internal (ftdi);
-        ftdi_error_return(-6, "ftdi_usb_reset failed");
-    }
+    if ((desc.bNumConfigurations > 0 && cfg != cfg0
+        && libusb_set_configuration(ftdi->usb_dev, cfg0) < 0) {
+     || libusb_claim_interface(ftdi->usb_dev, 0) < 0
+     || libusb_control_transfer(ftdi->usb_dev, FTDI_DEVICE_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_SIO, USB_INDEX, NULL, 0, WRITE_TIMEOUT) < 0)
+        goto error;
     if (desc.bcdDevice == 0x400 || (desc.bcdDevice == 0x200 && desc.iSerialNumber == 0))
         ftdi->type = TYPE_BM;
     else if (desc.bcdDevice == 0x200)
@@ -285,10 +258,11 @@ static int ftdi_usb_open_dev(struct ftdi_context *ftdi, libusb_device *dev)
     else if (desc.bcdDevice == 0x1000)
         ftdi->type = TYPE_230X;
     if (ftdi_set_baudrate (ftdi, 9600) != 0) {
-        ftdi_usb_close_internal (ftdi);
-        ftdi_error_return(-7, "set baudrate failed");
     }
     return 0;
+error:
+    ftdi_usb_close_internal (ftdi);
+    ftdi_error_return(-7, "set baudrate failed");
 }
 static struct ftdi_context *ftdi_new(void)
 {
@@ -300,4 +274,8 @@ printf("[%s:%d] funky version\n", __FUNCTION__, __LINE__);
     if (libusb_init(&ftdi->usb_ctx) < 0)
         ftdi_error_return(NULL, "libusb_init() failed");
     return ftdi;
+}
+static void ftdi_set_usbdev (struct ftdi_context *ftdi, libusb_device_handle *usb)
+{
+    ftdi->usb_dev = usb;
 }
