@@ -37,7 +37,7 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 
-#if 1
+#if 0
 #include "ftdi_reference.h"
 #else
 #include "jcaftdi.c"
@@ -64,53 +64,12 @@ int i;
 /*
  * Generic FTDI initialization
  */
-struct ftdi_context *init_ftdi(const char *serialno)
+struct ftdi_context *init_ftdi(libusb_device_handle *usbhandle)
 {
-    struct ftdi_device_list *devlist, *curdev;
-    char serial[64], manuf[64], desc[128];
-    int i;
-
-    /*
-     * Locate USB interface for JTAG
-     */
+int i;
     struct ftdi_context *ftdi = ftdi_new();
-    ftdi_usb_find_all(ftdi, &devlist, 0x0, 0x0);
-    curdev = devlist;
-    while(curdev) {
-        ftdi_usb_get_strings(ftdi, curdev->dev, manuf, sizeof(manuf),
-            desc, sizeof(desc), serial, sizeof(serial));
-        printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, desc, serial);
-        if (!serialno || !strcmp(serialno, serial))
-            break;
-        curdev = curdev->next;
-    }
-    if (!curdev) {
-        printf("Can't find usable usb interface\n");
-        exit(-1);
-    }
-    ftdi_usb_open_dev(ftdi, curdev->dev);
-    ftdi_list_free(&devlist);
 
-#if 0
-    /*
-     * Identify JTAG interface chip version
-     */
-    int eeprom_val;
-    uint8_t fbuf[256]; // since chiptype is 0x56, eerom size is 256
-    ftdi_read_eeprom(ftdi);
-    ftdi_eeprom_decode(ftdi, 0);
-    ftdi_get_eeprom_value(ftdi, CHIP_TYPE, &eeprom_val);
-    printf("[%s] CHIP_TYPE %x\n", __FUNCTION__, eeprom_val);
-    ftdi_get_eeprom_buf(ftdi, fbuf, sizeof(fbuf));
-#endif
-
-    /*
-     * Generic initialization of libftdi
-     */
-    ftdi_set_latency_timer(ftdi, 255);
-    ftdi_set_bitmode(ftdi, 0, 0);
-    ftdi_set_bitmode(ftdi, 0, 2);
-    ftdi_usb_purge_buffers(ftdi);
+    ftdi_set_usbdev(ftdi, usbhandle);
 
     /*
      * Generic command synchronization with ftdi chip
@@ -541,13 +500,76 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
 static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, uint32_t clock_frequency)
 {
     struct ftdi_context *ftdi;
-    int i;
-
 #define SET_CLOCK_DIVISOR    0x86, INT16(30000000/clock_frequency - 1)
+    int cfg, cfg0, type = 0, i = 0, baudrate = 9600;
+    static const char frac_code[8] = {0, 3, 2, 4, 1, 5, 6, 7};
+    int best_divisor = 12000000*8 / baudrate;
+    unsigned long encoded_divisor = (best_divisor >> 3) | (frac_code[best_divisor & 0x7] << 14);
+    struct libusb_context *usb_ctx;
+    libusb_device **device_list, *dev, *usbdev = NULL;
+    struct libusb_device_descriptor desc;
+    struct libusb_config_descriptor *config0;
+
+    /*
+     * Locate USB interface for JTAG
+     */
+    libusb_device_handle *usbhandle = NULL;
+    if (libusb_init(&usb_ctx) < 0
+     || libusb_get_device_list(usb_ctx, &device_list) < 0)
+        ftdi_error_return(NULL, "libusb_get_device_list() failed");
+    while ((dev = device_list[i++]) ) {
+        if (libusb_get_device_descriptor(dev, &desc) < 0)
+            break;
+        if ( desc.idVendor == 0x403 && (desc.idProduct == 0x6001 || desc.idProduct == 0x6010
+         || desc.idProduct == 0x6011 || desc.idProduct == 0x6014)) {
+            unsigned char serial[64], manuf[64], descrip[128];
+            libusb_ref_device(dev);
+            if (libusb_open(dev, &usbhandle) < 0)
+                ftdi_error_return(NULL, "libusb_open() failed");
+            if (libusb_get_string_descriptor_ascii(usbhandle, desc.iManufacturer, manuf, sizeof(manuf)) < 0
+             || libusb_get_string_descriptor_ascii(usbhandle, desc.iProduct, descrip, sizeof(descrip)) < 0
+             || libusb_get_string_descriptor_ascii(usbhandle, desc.iSerialNumber, serial, sizeof(serial)) < 0)
+                goto error;
+            printf("[%s] %s:%s:%s\n", __FUNCTION__, manuf, descrip, serial);
+            if (!serialno || !strcmp(serialno, (char *)serial)) {
+                usbdev = dev;
+                break;
+            }
+            libusb_close (usbhandle);
+        }
+    }
+    libusb_free_device_list(device_list,1);
+    if (!usbdev) {
+        printf("Can't find usable usb interface\n");
+        exit(-1);
+    }
+    if (libusb_get_config_descriptor(dev, 0, &config0) < 0)
+        goto error;
+    cfg0 = config0->bConfigurationValue;
+    libusb_free_config_descriptor (config0);
+    libusb_detach_kernel_driver(usbhandle, 0);
+    if (libusb_get_configuration (usbhandle, &cfg) < 0
+     || (desc.bNumConfigurations > 0 && cfg != cfg0 && libusb_set_configuration(usbhandle, cfg0) < 0)
+     || libusb_claim_interface(usbhandle, 0) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_SIO, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0)
+        goto error;
+    //(desc.bcdDevice == 0x700) //kc       TYPE_2232H
+    //(desc.bcdDevice == 0x900) //zedboard TYPE_232H
+printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type);
+    if (libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BAUDRATE_REQUEST,
+        (encoded_divisor | 0x20000) & 0xFFFF, ((encoded_divisor >> 8) & 0xFF00) | USB_INDEX,
+        NULL, 0, USB_TIMEOUT) < 0)
+        goto error;
+    if (libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_LATENCY_TIMER_REQUEST, 255, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 0 | (0 << 8), USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_SET_BITMODE_REQUEST, 0 | (2 << 8), USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_PURGE_RX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0
+     || libusb_control_transfer(usbhandle, USB_OUT_REQTYPE, SIO_RESET_REQUEST, SIO_RESET_PURGE_TX, USB_INDEX, NULL, 0, USB_TIMEOUT) < 0)
+        goto error;
     /*
      * Initialize FTDI chip and GPIO pins
      */
-    ftdi = init_ftdi(serialno);   /* generic initialization */
+    ftdi = init_ftdi(usbhandle);   /* generic initialization */
     uint8_t initialize_sequence[] = {
          LOOPBACK_END, // Disconnect TDI/DO from loopback
          DIS_DIV_5, // Disable clk divide by 5
@@ -582,6 +604,10 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999, idcode_pattern2);
     return ftdi;
+error:
+    libusb_close (usbhandle);
+    printf("open usb failed\n");
+    exit(-1);
 }
 
 static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
