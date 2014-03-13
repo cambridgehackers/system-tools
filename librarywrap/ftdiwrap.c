@@ -49,6 +49,7 @@ static struct {
     int len;
 } bufarr[MAX_ITEMS];
 static int bufarr_index = 0;
+static int logall = 1;
 
 static char *translate_context(struct ftdi_context *p)
 {
@@ -103,6 +104,13 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
 {
    static unsigned char bitswap[256];
    static int once = 1;
+   static const char *header = "    ";
+   static char header_data[200];
+   if (logall)
+       header = "WRITE";
+   strcpy(header_data, header);
+   strcat(header_data, "   ");
+   
     while (len > 0) {
         const unsigned char *pstart = p;
         int plen = 1;
@@ -122,7 +130,7 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
             return;
         }
         if (!submit || accum < ACCUM_LIMIT)
-            memdump(pstart, plen, "    ");
+            memdump(pstart, plen, header);
         if (submit && p[0] == 0x1b && p[1] == 6)
             write(datafile_fd, &bitswap[p[2]], 1);
         p += plen;
@@ -130,9 +138,7 @@ static void formatwrite(int submit, const unsigned char *p, int len, const char 
         if (ch == 0x19 || ch == 0x3d) {
             unsigned tlen = (pstart[2] << 8 | pstart[1]) + 1;
             if (!submit)
-                memdump(p, tlen, "         ");
-            //else if (accum < ACCUM_LIMIT)
-            //    memdump(p, tlen > 64 ? 64 : tlen, "         ");
+                memdump(p, tlen, header_data);
             if (submit && tlen > 4) {
                 int i;
                 for (i = 0; once && i < sizeof(bitswap); i++)
@@ -166,7 +172,7 @@ if (size > 1000)
     started = 1;
 else
     started = 0;    // shutdown before final writes
-        if (submit && started)
+        if ((submit && started) || logall)
             formatwrite(submit, buf, size, "WRITE");
         else {
             while (i < strarr_index) {
@@ -194,18 +200,22 @@ static char *readdata(const unsigned char *buf, int size)
     static char tempbuf[200];
     int ind = -1;
     int i = 0;
-    while (i < readarr_index) {
-        if (readarr[i].len == size && !memcmp(buf, readarr[i].p, size)) {
-            ind = i;
-            break;
+    if (logall)
+        memdump(buf, size, "READ");
+    else {
+        while (i < readarr_index) {
+            if (readarr[i].len == size && !memcmp(buf, readarr[i].p, size)) {
+                ind = i;
+                break;
+            }
+            i++;
         }
-        i++;
-    }
-    if (i == readarr_index) {
-        readarr[i].p = (unsigned char *)malloc(size);
-        readarr[i].len = size;
-        memcpy(readarr[i].p, buf, size);
-        ind = readarr_index++;
+        if (i == readarr_index) {
+            readarr[i].p = (unsigned char *)malloc(size);
+            readarr[i].len = size;
+            memcpy(readarr[i].p, buf, size);
+            ind = readarr_index++;
+        }
     }
     sprintf(tempbuf, "readdata%dz, sizeof(readdata%dz)", ind, ind);
     return tempbuf;

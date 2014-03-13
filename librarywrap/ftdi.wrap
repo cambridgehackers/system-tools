@@ -1,6 +1,5 @@
 WRAP: ftdi_init
     //fprintf(logfile, "\n%s(%s);\n", __FUNCTION__, translate_context(ftdi));
-    //end_datafile();
 WRAP: ftdi_deinit
     fprintf(logfile, "%s(%s);\n", __FUNCTION__, translate_context(ftdi));
     if (master_ftdi == ftdi)
@@ -30,7 +29,6 @@ WRAP: ftdi_new
     fprintf(logfile, "//%s() starting\n", __FUNCTION__);
 POST:
     fprintf(logfile, "//%p\n%s = %s();\n", retval, translate_context(retval), __FUNCTION__);
-    dump_context(retval);
     if (!master_ftdi)
         master_ftdi = retval;
     if (datafile_fd < 0)
@@ -39,8 +37,6 @@ WRAP: ftdi_read_data
 //int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int size)
 POST:
     fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), readdata(buf, size));
-    //memdump(buf, size, "READD");
-    //end_datafile();
     if (retval != size)
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_read_data_set_chunksize
@@ -52,7 +48,6 @@ WRAP: ftdi_read_data_submit
 POST:
 //struct ftdi_transfer_control *ftdi_read_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
     //fprintf(logfile, "%s(%s, %p, %d) = %p\n", __FUNCTION__, translate_context(ftdi), buf, size, retval);
-    //end_datafile();
     read_data_context = ftdi;
     read_data_submit_control = retval;
     read_data_buffer = buf;
@@ -88,7 +83,6 @@ POST:
         if (retval != read_data_len)
             fprintf(logfile, "%s(%p) = %d\n", __FUNCTION__, tc, retval);
         fprintf(logfile, "check_ftdi_read_data_submit(%s, %s);\n", translate_context(read_data_context), readdata(read_data_buffer, read_data_len));
-        //memdump(read_data_buffer, read_data_len, "READ");
         read_data_submit_control = NULL;
     }
     else if (tc == write_data_submit_control) {
@@ -147,11 +141,8 @@ POST:
         fprintf(logfile, "%s: returncode %d\n", __FUNCTION__, retval);
 WRAP: ftdi_write_data_submit
 POST:
-//struct ftdi_transfer_control *ftdi_write_data_submit(struct ftdi_context *ftdi, unsigned char *buf, int size)
     char *p = writedata(1, buf, size);
     if (accum < ACCUM_LIMIT)
         fprintf(logfile, "%s(%s, %s);\n", __FUNCTION__, translate_context(ftdi), p);
-    //else
-        //fprintf(logfile, " %d", size);
     write_data_submit_control = retval;
     write_data_len = size;
