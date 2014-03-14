@@ -25,6 +25,8 @@
 //     http://www.ftdichip.com/Documents/AppNotes/AN2232C-01_MPSSE_Cmnd.pdf
 // Xilinx Series7 Configuation documented at:
 //     ug470_7Series_Config.pdf
+
+// for using libftdi.so
 #define USE_LIBFTDI
 
 #include <stdio.h>
@@ -54,6 +56,17 @@
 
 static libusb_device_handle *usbhandle = NULL;
 static unsigned char usbreadbuffer[USB_CHUNKSIZE];
+static FILE *logfile;
+static int logall = 1;
+static int datafile_fd = -1;
+static void openlogfile(void)
+{
+    if (!logfile)
+        logfile = fopen("/tmp/xx.logfile2", "w");
+    if (datafile_fd < 0)
+        datafile_fd = creat("/tmp/xx.datafile2", 0666);
+}
+#include "dumpdata.h"
 #ifdef USE_LIBFTDI
 #include "ftdi_reference.h"
 #else
@@ -77,23 +90,23 @@ struct ftdi_context {
 struct ftdi_transfer_control {
 };
 #define ftdi_deinit(A)
-#define ftdi_transfer_data_done(A)
+#define ftdi_transfer_data_done(A) (void)(A)
 #define ftdi_set_usbdev(A,B)
 #define ftdi_write_data_submit(A, B, C) (ftdi_write_data((A), (B), (C)), NULL)
 #define ftdi_read_data_submit(A, B, C) (ftdi_read_data((A), (B), (C)), NULL)
 static int ftdi_write_data(struct ftdi_context *ftdi, const unsigned char *buf, int size)
 {
     int actual_length;
+formatwrite(1, buf, size, "WRITE");
     if (libusb_bulk_transfer(usbhandle, ENDPOINT_IN, (unsigned char *)buf, size, &actual_length, USB_TIMEOUT) < 0)
         printf( "usb bulk write failed");
     return actual_length;
 }
 static int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int size)
 {
-    int offset = 0, ret;
     int actual_length = 1;
     do {
-        ret = libusb_bulk_transfer (usbhandle, ENDPOINT_OUT, usbreadbuffer, USB_CHUNKSIZE, &actual_length, USB_TIMEOUT);
+        int ret = libusb_bulk_transfer (usbhandle, ENDPOINT_OUT, usbreadbuffer, USB_CHUNKSIZE, &actual_length, USB_TIMEOUT);
         if (ret < 0)
             printf( "usb bulk read failed");
         actual_length -= 2;
@@ -103,7 +116,8 @@ static int ftdi_read_data(struct ftdi_context *ftdi, unsigned char *buf, int siz
         printf("[%s:%d] bozo actual_length %d size %d\n", __FUNCTION__, __LINE__, actual_length, size);
         exit(-1);
         }
-    return offset;
+memdumpfile(buf, size, "READ");
+    return size;
 }
 static struct ftdi_context *ftdi_new(void)
 {
@@ -376,34 +390,12 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
     return NULL;
 }
 
-static void send_data_file(struct ftdi_context *ftdi, int inputfd)
-{
-    int size, i;
-    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
-    uint8_t *headerp =
-         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
-    int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
-
-    printf("Starting to send file\n");
-    do {
-        static uint8_t filebuffer[FILE_READSIZE];
-        size = read(inputfd, filebuffer, FILE_READSIZE);
-        if (size < FILE_READSIZE)
-            tailp = DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE);
-        for (i = 0; i < size; i++)
-            filebuffer[i] = bitswap[filebuffer[i]];
-        send_data_frame(ftdi, 0, (uint8_t *[]){headerp, NULL}, tailp, filebuffer, size, limit_len, NULL);
-        headerp = DITEM(PAUSE_TO_SHIFT);
-        limit_len = MAX_SINGLE_USB_DATA;
-    } while(size == FILE_READSIZE);
-    printf("Done sending file\n");
-}
-
 /*
  * Xilinx constants
  */
 //#define CLOCK_FREQUENCY      15000000
 #define CLOCK_FREQUENCY      30000000
+#define MAX_PACKET_STRING    10
 
 #define IRREG_USER2          0x003
 #define IRREG_CFG_OUT        0x004
@@ -452,6 +444,7 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
      SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0),                     \
      SEND_IMMEDIATE
 
+//idcode for cortex 0x4ba00477
 static uint8_t idcode_pattern1[] = DITEM( INT32(0), PATTERN1, 0x00); // starts with idcode
 static uint8_t idcode_pattern2[] = DITEM( INT32(0), PATTERN2, 0xff); // starts with idcode
 
@@ -473,6 +466,13 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
         idcode |= 0xf0000000 & returnedid;
         memcpy(idcode_pattern2+1, rdata, 4); // copy returned idcode
         memcpy(idcode_pattern1+1, rdata, 4);       // copy returned idcode
+        if (memcmp(idcode_pattern1+1, rdata, idcode_pattern1[0])) {
+            uint32_t anotherid;
+            memcpy(&anotherid, rdata+4, 4);
+            printf("[%s] second device idcode found 0x%x\n", __FUNCTION__, anotherid);
+            memcpy(idcode_pattern1+4+1, rdata+4, 4);   // copy 2nd idcode
+            memcpy(idcode_pattern2+4+1, rdata+4, 4);   // copy 2nd idcode
+        }
         idcode_setup = 1;
         if (idcode != returnedid) {
             printf("[%s] id %x from file does not match actual id %x\n", __FUNCTION__, idcode, returnedid);
@@ -512,6 +512,41 @@ static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
            }
         }
     }
+}
+
+static void send_data_file(struct ftdi_context *ftdi, int inputfd)
+{
+//WRITE 0x19, 0xcd, 0x0f, 4045
+//WRITE 0x19, 0x70, 0x09, 2416
+    int size, i;
+    uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
+    uint8_t *headerp =
+         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
+    int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
+
+    int packet_string = 11;
+int packet_count = 0;
+    printf("Starting to send file\n");
+    do {
+        static uint8_t filebuffer[FILE_READSIZE];
+//fprintf(logfile, "[%s:%d] packetcount %d\n", __FUNCTION__, __LINE__, packet_count++);
+        size = read(inputfd, filebuffer, FILE_READSIZE);
+        if (size < FILE_READSIZE)
+            tailp = DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE);
+        for (i = 0; i < size; i++)
+            filebuffer[i] = bitswap[filebuffer[i]];
+        send_data_frame(ftdi, 0, (uint8_t *[]){headerp, NULL}, tailp, filebuffer, size, limit_len, NULL);
+        headerp = DITEM(PAUSE_TO_SHIFT);
+        limit_len = MAX_SINGLE_USB_DATA;
+#if 0
+//fprintf(logfile, "[%s:%d] packetst %d\n", __FUNCTION__, __LINE__, packet_string);
+        if (--packet_string <= 0) {
+            bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+            packet_string = 13;
+        }
+#endif
+    } while(size == FILE_READSIZE);
+    printf("Done sending file\n");
 }
 
 static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3, uint32_t expected)
@@ -669,7 +704,7 @@ printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type)
         iddata, sizeof(iddata), 9999, idcode_pattern2);
     return ftdi;
 error:
-    libusb_close (usbhandle);
+    //libusb_close (usbhandle);
     printf("Can't find usable usb interface\n");
     exit(-1);
 }
@@ -677,6 +712,7 @@ error:
 static uint8_t *cfg_in_command = DITEM(RESET_TO_IDLE, EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN), IDLE_TO_SHIFT_DR);
 int main(int argc, char **argv)
 {
+logfile = stdout;
     struct ftdi_context *ftdi;
     uint32_t idcode;
     uint16_t ret16;
