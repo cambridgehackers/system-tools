@@ -486,32 +486,34 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
     }
 }
 
-static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep)
+static void data_test(struct ftdi_context *ftdi)
 {
+    int i;
+    uint64_t ret40;
     uint8_t *added_item[] = {
         DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
         DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
-    int i, j = 3;
-    uint64_t ret40;
-
-    check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
-    while (j-- > 0) {
-        uint8_t *alist[5] = {
-            DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
-                   EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USER2),
-                   IDLE_TO_SHIFT_DR),
-            DITEM(COMMAND_ENDING),
-            NULL, NULL, NULL};
-        for (i = 0; i < 4; i++) {
-           if ((ret40 = fetch40(ftdi, catlist(alist))) != 0)
-               printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
-           if (i <= 1) {
-               alist[3] = alist[2];
-               alist[2] = alist[1];
-               alist[1] = added_item[i];
-           }
+    uint8_t *alist[5] = {
+        DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
+               EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USER2),
+               IDLE_TO_SHIFT_DR),
+        DITEM(COMMAND_ENDING),
+        NULL, NULL, NULL};
+    for (i = 0; i < 4; i++) {
+        if ((ret40 = fetch40(ftdi, catlist(alist))) != 0)
+            printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
+        if (i <= 1) {
+            alist[3] = alist[2];
+            alist[2] = alist[1];
+            alist[1] = added_item[i];
         }
     }
+}
+static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep, int j)
+{
+    check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
+    while (j-- > 0)
+        data_test(ftdi);
 }
 
 static void send_data_file(struct ftdi_context *ftdi, int inputfd)
@@ -541,7 +543,7 @@ int packet_count = 0;
 #if 0
 //fprintf(logfile, "[%s:%d] packetst %d\n", __FUNCTION__, __LINE__, packet_string);
         if (--packet_string <= 0) {
-            bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+            bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
             packet_string = 13;
         }
 #endif
@@ -687,8 +689,8 @@ printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type)
      * Step 5: Check Device ID
      */
     check_idcode(ftdi, DITEM( RESET_TO_RESET), idcode);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
 
     static uint8_t i2resetin[] = DITEM(IDLE_TO_RESET, IN_RESET_STATE);
     write_data(ftdi, i2resetin+1, i2resetin[0]);
@@ -762,10 +764,10 @@ logfile = stdout;
             printf("xjtag: bypass mismatch %x\n", ret16);
     }
     read_status(ftdi, cfg_in_command, NULL, 0x30861900);
-    bypass_test(ftdi, DITEM( RESET_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( RESET_TO_RESET), 3);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
     /*
      * Step 2: Initialization
      */
@@ -806,7 +808,7 @@ logfile = stdout;
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS),
               SEND_IMMEDIATE))) != 0xf5a9)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET));
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
     read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command, 0xf0fe7910);
     ftdi_deinit(ftdi);
 #ifndef USE_LIBFTDI
