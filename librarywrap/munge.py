@@ -34,10 +34,10 @@ if __name__=='__main__':
         for temp in lines:
             temp = temp.rstrip();
             if temp.find('0xcd') > 0:
-                for i in range(1000, 1040):
+                for i in range(1000, 3000):
                     print('BOZOMATCHLINEbefore', i, counter)
                 print(temp)
-                for i in range(1000, 1040):
+                for i in range(1000, 3000):
                     print('BOZOMATCHLINEafter', i, counter)
                 counter = counter + 1
             else:
