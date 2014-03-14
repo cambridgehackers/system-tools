@@ -147,40 +147,6 @@ int i;
     printf("\n");
 }
 
-/*
- * Generic FTDI initialization
- */
-struct ftdi_context *init_ftdi(void)
-{
-int i;
-    struct ftdi_context *ftdi = ftdi_new();
-#ifdef USE_LIBFTDI
-    ftdi_set_usbdev(ftdi, usbhandle);
-    ftdi->usb_ctx = usb_context;
-    ftdi->max_packet_size = 512; //5000;
-#endif
-
-    /*
-     * Generic command synchronization with ftdi chip
-     */
-    static uint8_t errorcode_aa[] = { 0xfa, 0xaa };
-    static uint8_t errorcode_ab[] = { 0xfa, 0xab };
-    uint8_t retcode[2];
-    for (i = 0; i < 4; i++) {
-        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
-        ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
-        ftdi_read_data(ftdi, retcode, sizeof(retcode));
-        if (memcmp(retcode, errorcode_aa, sizeof(errorcode_aa)))
-            memdump(retcode, sizeof(retcode), "RETaa");
-    }
-    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
-    ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
-        ftdi_read_data(ftdi, retcode, sizeof(retcode));
-    if (memcmp(retcode, errorcode_ab, sizeof(errorcode_ab)))
-        memdump(retcode, sizeof(retcode), "RETab");
-    return ftdi;
-}
-
 #define BUFFER_MAX_LEN      1000000
 #define FILE_READSIZE          6464
 #define MAX_SINGLE_USB_DATA    4045
@@ -512,8 +478,61 @@ static void data_test(struct ftdi_context *ftdi)
 static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep, int j)
 {
     check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
-    while (j-- > 0)
+    while (j-- > 0) {
+printf("[%s:%d] %d\n", __FUNCTION__, __LINE__, j);
         data_test(ftdi);
+    }
+}
+
+/*
+ * FTDI initialization
+ */
+struct ftdi_context *init_ftdi(uint32_t clock_frequency, uint32_t idcode)
+{
+#define SET_CLOCK_DIVISOR    TCK_DIVISOR, INT16(30000000/clock_frequency - 1)
+int i;
+    struct ftdi_context *ftdi = ftdi_new();
+#ifdef USE_LIBFTDI
+    ftdi_set_usbdev(ftdi, usbhandle);
+    ftdi->usb_ctx = usb_context;
+    ftdi->max_packet_size = 512; //5000;
+#endif
+
+int j = 1;
+while (j-- > 0) {
+    /*
+     * Generic command synchronization with ftdi chip
+     */
+    static uint8_t errorcode_aa[] = { 0xfa, 0xaa };
+    static uint8_t errorcode_ab[] = { 0xfa, 0xab };
+    uint8_t retcode[2];
+    for (i = 0; i < 4; i++) {
+        static uint8_t illegal_command[] = { 0xaa, SEND_IMMEDIATE };
+        ftdi_write_data(ftdi, illegal_command, sizeof(illegal_command));
+        ftdi_read_data(ftdi, retcode, sizeof(retcode));
+        if (memcmp(retcode, errorcode_aa, sizeof(errorcode_aa)))
+            memdump(retcode, sizeof(retcode), "RETaa");
+    }
+    static uint8_t command_ab[] = { 0xab, SEND_IMMEDIATE };
+    ftdi_write_data(ftdi, command_ab, sizeof(command_ab));
+        ftdi_read_data(ftdi, retcode, sizeof(retcode));
+    if (memcmp(retcode, errorcode_ab, sizeof(errorcode_ab)))
+        memdump(retcode, sizeof(retcode), "RETab");
+    uint8_t initialize_sequence[] = {
+         LOOPBACK_END, // Disconnect TDI/DO from loopback
+         DIS_DIV_5, // Disable clk divide by 5
+         SET_CLOCK_DIVISOR,
+         SET_BITS_LOW, 0xe8, 0xeb,
+         SET_BITS_HIGH, 0x20, 0x30,
+         SET_BITS_HIGH, 0x30, 0x00,
+         SET_BITS_HIGH, 0x00, 0x00,
+         FORCE_RETURN_TO_RESET
+    };
+    ftdi_write_data(ftdi, initialize_sequence, sizeof(initialize_sequence));
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+    check_idcode(ftdi, DITEM( RESET_TO_RESET), idcode);
+}
+    return ftdi;
 }
 
 static void send_data_file(struct ftdi_context *ftdi, int inputfd)
@@ -606,7 +625,6 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
 static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, uint32_t clock_frequency)
 {
     struct ftdi_context *ftdi;
-#define SET_CLOCK_DIVISOR    TCK_DIVISOR, INT16(30000000/clock_frequency - 1)
     int cfg, type = 0, i = 0, baudrate = 9600;
     static const char frac_code[8] = {0, 3, 2, 4, 1, 5, 6, 7};
     int best_divisor = 12000000*8 / baudrate;
@@ -667,30 +685,25 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
     //(desc.bcdDevice == 0x700) //kc       TYPE_2232H
     //(desc.bcdDevice == 0x900) //zedboard TYPE_232H
 printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type);
+    for (i = 0; i < sizeof(bitswap); i++)
+        bitswap[i] = BSWAP(i);
     /*
      * Initialize FTDI chip and GPIO pins
      */
-    ftdi = init_ftdi();   /* generic initialization */
-    uint8_t initialize_sequence[] = {
-         LOOPBACK_END, // Disconnect TDI/DO from loopback
-         DIS_DIV_5, // Disable clk divide by 5
-         SET_CLOCK_DIVISOR,
-         SET_BITS_LOW, 0xe8, 0xeb,
-         SET_BITS_HIGH, 0x20, 0x30,
-         SET_BITS_HIGH, 0x30, 0x00,
-         SET_BITS_HIGH, 0x00, 0x00,
-         FORCE_RETURN_TO_RESET
-    };
-    ftdi_write_data(ftdi, initialize_sequence, sizeof(initialize_sequence));
-    for (i = 0; i < sizeof(bitswap); i++)
-        bitswap[i] = BSWAP(i);
+    ftdi = init_ftdi(clock_frequency, idcode);   /* generic initialization */
 
     /*
      * Step 5: Check Device ID
      */
-    check_idcode(ftdi, DITEM( RESET_TO_RESET), idcode);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+#if 0
+    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 9);
+#else
     bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
+#endif
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
     static uint8_t i2resetin[] = DITEM(IDLE_TO_RESET, IN_RESET_STATE);
     write_data(ftdi, i2resetin+1, i2resetin[0]);
