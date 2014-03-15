@@ -24,45 +24,54 @@
 from __future__ import print_function
 import optparse, os, sys
 
-formatmap = {}
-formatmap['WRITE 0x4b,'] = '    TMSW,'
-formatmap['WRITE 0x6f,'] = '    TMSRW,'
-formatmap['WRITE 0x1b,'] = '    DATAWBIT,'
-formatmap['WRITE 0x2e,'] = '    DATARBIT,'
-formatmap['WRITE 0x3f,'] = '    DATARWBIT,'
-formatmap['WRITE 0x19,'] = '    DATAW,'
-formatmap['WRITE 0x2c,'] = '    DATAR,'
-formatmap['WRITE 0x3d,'] = '    DATARW,'
-formatmap['WRITE    '] = '        '
-formatmap['WRITE 0x87,'] = '    SEND_IMMEDIATE,'
-formatmap['DATAW, 0x03, 0x00,'] = 'DATAW(4),'
-formatmap['DATAW, 0x00, 0x00,'] = 'DATAW(1),'
-formatmap['DATAR, 0x03, 0x00,'] = 'DATAR(4),'
-formatmap['DATARW, 0x03, 0x00,'] = 'DATARW(4),'
-formatmap['DATARW, 0x3e, 0x00,'] = 'DATARW(0x3f),'
-formatmap['DATARW, 0x7e, 0x00,'] = 'DATARW(0x7f),'
+# formatmap replacements are ordered, so use a list
+formatmap = []
+formatmap.append(['WRITE 0x4b,', '    TMSW,'])
+formatmap.append(['WRITE 0x6f,', '    TMSRW,'])
+formatmap.append(['WRITE 0x1b,', '    DATAWBIT,'])
+formatmap.append(['WRITE 0x2e,', '    DATARBIT,'])
+formatmap.append(['WRITE 0x3f,', '    DATARWBIT,'])
+formatmap.append(['WRITE 0x19,', '    DATAW,'])
+formatmap.append(['WRITE 0x2c,', '    DATAR,'])
+formatmap.append(['WRITE 0x3d,', '    DATARW,'])
+formatmap.append(['WRITE    ', '        '])
+formatmap.append(['WRITE 0x87,', '    SEND_IMMEDIATE,'])
 
-formatmap['TMSW, 0x00, 0x01'] = 'SHIFT_TO_EXIT1(0, 0)'
-formatmap['TMSW, 0x02, 0x03'] = 'SHIFT_TO_UPDATE_TO_IDLE(0, 0)'
-formatmap['TMSW, 0x00, 0x81'] = 'SHIFT_TO_EXIT1(0, 0x80)'
-formatmap['TMSW, 0x02, 0x83'] = 'SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)'
-formatmap['TMSRW, 0x00, 0x01'] = 'SHIFT_TO_EXIT1(DREAD, 0)'
-formatmap['TMSRW, 0x02, 0x03'] = 'SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)'
-formatmap['TMSRW, 0x00, 0x81'] = 'SHIFT_TO_EXIT1(DREAD, 0x80)'
-formatmap['TMSRW, 0x02, 0x83'] = 'SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)'
+formatmap.append(['DATAW, 0x03, 0x00', 'DATAW(4)'])
+formatmap.append(['DATAW, 0x00, 0x00', 'DATAW(1)'])
+formatmap.append(['DATAR, 0x03, 0x00', 'DATAR(4)'])
+formatmap.append(['DATARW, 0x03, 0x00', 'DATARW(4)'])
+formatmap.append(['DATARW, 0x3e, 0x00', 'DATARW(0x3f)'])
+formatmap.append(['DATARW, 0x7e, 0x00', 'DATARW(0x7f)'])
+formatmap.append(['TMSW, 0x00, 0x01', 'SHIFT_TO_EXIT1(0, 0)'])
+formatmap.append(['TMSW, 0x02, 0x03', 'SHIFT_TO_UPDATE_TO_IDLE(0, 0)'])
+formatmap.append(['TMSW, 0x00, 0x81', 'SHIFT_TO_EXIT1(0, 0x80)'])
+formatmap.append(['TMSW, 0x02, 0x83', 'SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)'])
+formatmap.append(['TMSRW, 0x00, 0x01', 'SHIFT_TO_EXIT1(DREAD, 0)'])
+formatmap.append(['TMSRW, 0x02, 0x03', 'SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)'])
+formatmap.append(['TMSRW, 0x00, 0x81', 'SHIFT_TO_EXIT1(DREAD, 0x80)'])
+formatmap.append(['TMSRW, 0x02, 0x83', 'SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)'])
+formatmap.append(['TMSW, 0x03, 0x03', 'IDLE_TO_SHIFT_IR'])
+formatmap.append(['TMSW, 0x02, 0x01', 'IDLE_TO_SHIFT_DR'])
+formatmap.append(['TMSW, 0x01, 0x01', 'EXIT1_TO_IDLE'])
+formatmap.append(['TMSW, 0x02, 0x07', 'IDLE_TO_RESET'])
+formatmap.append(['TMSW, 0x00, 0x00', 'RESET_TO_IDLE'])
+formatmap.append(['TMSW, 0x00, 0x7f', 'IN_RESET_STATE'])
+formatmap.append(['TMSW, 0x04, 0x1f', 'FORCE_RETURN_TO_RESET'])
+formatmap.append(['TMSW, 0x03, 0x02', 'RESET_TO_SHIFT_DR'])
+formatmap.append(['TMSW, 0x00, 0x01', 'RESET_TO_RESET'])
+formatmap.append(['TMSW, 0x01, 0x01', 'PAUSE_TO_SHIFT'])
+formatmap.append(['TMSW, 0x01, 0x01', 'SHIFT_TO_PAUSE'])
+formatmap.append(['TMSW, 0x04, 0x7f', 'TMS_RESET_WEIRD'])
 
-formatmap['TMSW, 0x03, 0x03'] = 'IDLE_TO_SHIFT_IR'
-formatmap['TMSW, 0x02, 0x01'] = 'IDLE_TO_SHIFT_DR'
-formatmap['TMSW, 0x01, 0x01'] = 'EXIT1_TO_IDLE'
-formatmap['TMSW, 0x02, 0x07'] = 'IDLE_TO_RESET'
-formatmap['TMSW, 0x00, 0x00'] = 'RESET_TO_IDLE'
-formatmap['TMSW, 0x00, 0x7f'] = 'IN_RESET_STATE'
-formatmap['TMSW, 0x04, 0x1f'] = 'FORCE_RETURN_TO_RESET'
-formatmap['TMSW, 0x03, 0x02'] = 'RESET_TO_SHIFT_DR'
-formatmap['TMSW, 0x00, 0x01'] = 'RESET_TO_RESET'
-formatmap['TMSW, 0x01, 0x01'] = 'PAUSE_TO_SHIFT'
-formatmap['TMSW, 0x01, 0x01'] = 'SHIFT_TO_PAUSE'
-formatmap['TMSW, 0x04, 0x7f'] = 'TMS_RESET_WEIRD'
+multiline = {}
+#multiline['READ 0xfa,\nREAD '] = 'READ 0xfa, '
+multiline['TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00'] = 'TMS_WAIT'
+multiline['),\n        INT32('] = '), INT32('
+multiline['IDLE_TO_SHIFT_IR,\n    DATA'] = 'IDLE_TO_SHIFT_IR, DATA'
+
+int32template = '        0x02, 0x08, 0x00, 0xc0,'
+#                          23    89    45    01
 
 if __name__=='__main__':
     parser = optparse.OptionParser("usage: %prog [options] arg")
@@ -70,17 +79,27 @@ if __name__=='__main__':
     (options, args) = parser.parse_args()
     counter = 1000
     for afile in args:
+        outline = ''
         lines = open(afile).readlines()
+        lastline = ''
         for temp in lines:
-            #temp = temp + '  '
             temp = temp.rstrip()
-            #print('JJ "' + temp + '"')
-            for item in formatmap.iterkeys():
-                ind = temp.find(item)
-                #if ind >= 0:
-                    #print('item "'+item+'"', ind, len(item), 'Z' + temp[ind+len(item):] + 'Z')
-                if ind == 0:
-                    temp = formatmap[item] + temp[ind+len(item):]
-                elif ind >= 0:
-                    temp = temp[:ind-1] + formatmap[item] + temp[ind+len(item):]
-            print(temp)
+            for item in formatmap:
+                ind = temp.find(item[0])
+                if ind >= 0:
+                    temp = temp[:ind] + item[1] + temp[ind+len(item[0]):]
+            if temp.startswith('        ') and len(temp) == len(int32template):
+                temp = temp.strip()
+                temp = '        INT32(0x' + temp[20:22] + temp[14:16] + temp[8:10] + temp[2:4] + '),'
+                temp = temp.replace('INT32(0x000000', 'INT32(0x')
+            if temp.startswith('    DATA') and lastline.startswith('    DATA'):
+                outline = outline + temp[3:]
+            elif temp.startswith('READ') and lastline.startswith('READ'):
+                outline = outline + temp[4:]
+            else:
+                outline = outline + '\n' + temp
+            lastline = temp
+        for item in multiline.iterkeys():
+            outline = outline.replace(item, multiline[item])
+        print(outline)
+
