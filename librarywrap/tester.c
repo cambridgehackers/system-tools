@@ -28,6 +28,7 @@
 
 // for using libftdi.so
 #define USE_LIBFTDI
+//#define USE_FTDI_232H
 
 #include <stdio.h>
 #include <string.h>
@@ -128,6 +129,8 @@ printf("[%s:%d] funky version\n", __FUNCTION__, __LINE__);
 #endif
 
 static struct libusb_context *usb_context;
+static int number_of_devices = 1;
+static int found_232H;
 
 static void memdump(uint8_t *p, int len, char *title)
 {
@@ -179,9 +182,8 @@ int i;
 #define DATAWBIT  (DWRITE|MPSSE_BITMODE)       //1b
 #define DATARBIT  (DREAD |MPSSE_BITMODE)       //2e
 #define DATARWBIT (DREAD |DWRITE|MPSSE_BITMODE)//3f
-#define DATAW(A)          DWRITE, INT16((A)-1) //19
+#define DATAW(READA, A)    (DWRITE|(READA)), INT16((A)-1) //(0)->19 (DREAD)->3d
 #define DATAR(A)           DREAD, INT16((A)-1) //2c
-#define DATARW(A) (DREAD|DWRITE), INT16((A)-1) //3d
 
 #define IDLE_TO_SHIFT_IR   TMSW, 0x03, 0x03  /* Idle -> Shift-IR */
 #define IDLE_TO_SHIFT_DR   TMSW, 0x02, 0x01  /* Idle -> Shift-DR */
@@ -209,14 +211,24 @@ int i;
 #define TMS_RESET_WEIRD      TMSW, 0x04, 0x7f /* Reset????? */
 #define EXTEND_EXTRA 0xc0
 
+#ifdef USE_FTDI_232H
+#define OPCODE_BITS 0x05
+#define IRREG_EXTRABIT 0x100
+#define EXTRA_BIT(READA, B)     DATAWBIT | (READA), 0x02, (B),
+#else
+#define OPCODE_BITS 0x04
+#define IRREG_EXTRABIT 0
+#define EXTRA_BIT(READA, B)
+#endif
+
 #define JTAG_IRREG(READA, A)                             \
      IDLE_TO_SHIFT_IR,                            \
-     DATAWBIT | (READA), 0x04, M(A),                        \
+     DATAWBIT | (READA), 4, M(A),                        \
      SHIFT_TO_EXIT1((READA), ((A) & 0x100)>>1)
 
 #define EXTENDED_COMMAND(READA, A)                       \
      IDLE_TO_SHIFT_IR,                            \
-     DATAWBIT | (READA), 0x04, M(A),                 \
+     DATAWBIT | (READA), OPCODE_BITS, M(A),                 \
      SHIFT_TO_UPDATE_TO_IDLE((READA), ((A) & 0x100)>>1)
 
 static uint8_t *catlist(uint8_t *arg[])
@@ -363,14 +375,14 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 #define CLOCK_FREQUENCY      30000000
 #define MAX_PACKET_STRING    10
 
-#define IRREG_USER2          0x003
-#define IRREG_CFG_OUT        0x004
-#define IRREG_CFG_IN         0x005
-#define IRREG_USERCODE       0x008
-#define IRREG_JPROGRAM       0x00b
-#define IRREG_JSTART         0x00c
-#define IRREG_ISC_NOOP       0x014
-#define IRREG_BYPASS         0x13f
+#define IRREG_USER2          (IRREG_EXTRABIT | 0x003)
+#define IRREG_CFG_OUT        (IRREG_EXTRABIT | 0x004)
+#define IRREG_CFG_IN         (IRREG_EXTRABIT | 0x005)
+#define IRREG_USERCODE       (IRREG_EXTRABIT | 0x008)
+#define IRREG_JPROGRAM       (IRREG_EXTRABIT | 0x00b)
+#define IRREG_JSTART         (IRREG_EXTRABIT | 0x00c)
+#define IRREG_ISC_NOOP       (IRREG_EXTRABIT | 0x014)
+#define IRREG_BYPASS         (IRREG_EXTRABIT | 0x13f)
 
 #define SMAP_DUMMY           0xffffffff
 #define SMAP_SYNC            0xaa995566
@@ -438,6 +450,7 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
             printf("[%s] second device idcode found 0x%x\n", __FUNCTION__, anotherid);
             memcpy(idcode_pattern1+4+1, rdata+4, 4);   // copy 2nd idcode
             memcpy(idcode_pattern2+4+1, rdata+4, 4);   // copy 2nd idcode
+            number_of_devices++;
         }
         idcode_setup = 1;
         if (idcode != returnedid) {
@@ -451,13 +464,45 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
         memdump(rdata, idcode_pattern1[0], "ACTUAL");
     }
 }
+#define WRITE_READ(LL, A,B) \
+    /*printf("[%d]\n", LL);*/ \
+    write_data(ftdi, (A)+1, (A)[0]); \
+    check_read_data(ftdi, (B));
+#define TEMPLOADIR(A) \
+    IDLE_TO_SHIFT_IR, \
+    DATAWBIT, 0x05, 0xff, \
+    DATAWBIT, 0x02
+#define TEMPLOADDR(A) \
+    IDLE_TO_SHIFT_DR, \
+    DATAWBIT, 0x00, 0x00
+#define LOADIR(A) \
+    TEMPLOADIR(0), (A), TMSW, 0x01, 0x83
+#define LOADDR(AREAD, A, B, C) \
+    TEMPLOADDR(0), DATAW((AREAD), 4), INT32(A), \
+    DATAWBIT | (AREAD), 0x01, (B),\
+    SHIFT_TO_UPDATE_TO_IDLE((AREAD),(C))
+#define LOADDR_WAIT(AREAD, A, B, C) \
+        LOADDR(AREAD, A, B, C), \
+        RESET_TO_IDLE, TMS_WAIT, TMSW, 0x02, 0x00
+
+#define LOADIRDR(IRA, AREAD, A, B, C) \
+    LOADIR(IRA), LOADDR(AREAD, A, B, C)
+
+#define LOADIRDR_WAIT(IRA, AREAD, A, B, C) \
+    LOADIR(IRA), LOADDR_WAIT(AREAD, A, B, C)
+
+#define LOADDR_3_7 \
+    LOADDR(DREAD, 0x03, 0, 0), LOADDR(DREAD, 0x07, 0, 0), SEND_IMMEDIATE
+
+#define LOADIRDR_3_7(A) \
+    LOADIR(A), LOADDR_3_7
 
 static void data_test(struct ftdi_context *ftdi)
 {
     int i;
     uint64_t ret40;
     uint8_t *added_item[] = {
-        DITEM( DATAW(1), 0x69, DATAWBIT, 0x01, 0x00, ),
+        DITEM( DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, ),
         DITEM( DATAWBIT, 0x04, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0), IDLE_TO_SHIFT_DR)};
     uint8_t *alist[5] = {
         DITEM( EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_BYPASS),
@@ -475,6 +520,42 @@ static void data_test(struct ftdi_context *ftdi)
         }
     }
 }
+#ifdef USE_FTDI_232H
+static void string_test3(struct ftdi_context *ftdi)
+{
+    uint8_t *dresp = DITEM(0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+uint8_t *senddata = DITEM(LOADIRDR(0xf8, 0, 0x08, 0, 0), LOADIRDR(0xfa, 0, 0x8000019a, 2, 0), LOADIRDR(0xfa, 0, 0x03, 0, 0), LOADDR_3_7);
+    WRITE_READ(__LINE__, senddata, dresp);
+    senddata = DITEM(LOADIRDR(0xfa, 0, 0x04, 0, 0), LOADIRDR(0xfb, DREAD, 0x01, 0, 0), RESET_TO_IDLE, TMS_WAIT, TMSW, 0x03, 0x00, LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x06, 0x00, 0x04, 0x01, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+    senddata = DITEM(LOADIRDR(0xfa, 0, 0x08000004, 0, 0), LOADIRDR_WAIT(0xfb, DREAD, 0x01, 0, 0), LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x02, 0x00, 0x00, 0x08, 0x02, 0x00, 0x12, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+}
+static void string_test(struct ftdi_context *ftdi, int count)
+{
+    while (count--)
+        string_test3(ftdi);
+uint8_t *senddata, *dresp;
+    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x004818a2, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADDR_WAIT(DREAD, 0x00480442, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x12, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+
+    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x00480422, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+
+    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x004918a2, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADDR_WAIT(DREAD, 0x00490442, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x00490422, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+}
+#else
+#define string_test(A, B)
+#endif
 static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep, int j)
 {
     check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
@@ -542,7 +623,7 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
     int size, i;
     uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
     uint8_t *headerp =
-         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(4), INT32(0) );
+         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(0, 4), INT32(0) );
     int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
 
     int packet_string = 11;
@@ -601,20 +682,20 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
         (uint8_t *[]){prefix,
                       DITEM(JTAG_IRREG(0, IRREG_CFG_IN), EXIT1_TO_IDLE,
                         IDLE_TO_SHIFT_DR,
-                        DATAW(4), SWAP32(SMAP_DUMMY),
-                        DATAW(4), SWAP32(SMAP_SYNC),
-                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-                        DATAW(4)),
+                        DATAW(0, 4), SWAP32(SMAP_DUMMY),
+                        DATAW(0, 4), SWAP32(SMAP_SYNC),
+                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                        DATAW(0, 4)),
                       (uint8_t []){4, SWAP32(SMAP_TYPE1(SMAP_OP_READ, data, 1))},
-                      DITEM(DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
-                        DATAW(4), SWAP32(SMAP_CMD_DESYNC),
-                        DATAW(4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), NULL},
+                      DITEM(DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
+                        DATAW(0, 4), SWAP32(SMAP_CMD_DESYNC),
+                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), NULL},
         DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE,
               JTAG_IRREG(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
               IDLE_TO_SHIFT_DR,
-              DATARW(3), 0x00, 0x00, 0x00,
+              DATAW(DREAD, 3), 0x00, 0x00, 0x00,
               DATARWBIT, 0x06, 0x00,
               SHIFT_TO_EXIT1(DREAD, 0),
               SEND_IMMEDIATE ),
@@ -812,7 +893,11 @@ logfile = stdout;
             JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE))) != 0xd6ac)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
 
-    if ((ret40 = read_smap(ftdi, DITEM( EXIT1_TO_IDLE ), SMAP_REG_STAT)) != (((uint64_t)0xfcfe7910 << 8) | 0x40))
+    if ((ret40 = read_smap(ftdi, DITEM(
+#ifdef USE_FTDI_232H
+              EXIT1_TO_IDLE, DATAWBIT, 0x02, 0xff, SHIFT_TO_EXIT1(0, 0x80),
+#endif
+              EXIT1_TO_IDLE ), SMAP_REG_STAT)) != (((uint64_t)0xfcfe7910 << 8) | 0x40))
         printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
     static uint8_t bypass_end[] = DITEM(EXIT1_TO_IDLE, JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE);
     write_data(ftdi, bypass_end+1, bypass_end[0]);
