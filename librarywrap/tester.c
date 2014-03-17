@@ -731,30 +731,39 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
 
 static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t data)
 {
-    static uint8_t request_data[] = {INT32(4)};
-
-    send_data_frame(ftdi, 0,
-        (uint8_t *[]){prefix,
-                      DITEM(JTAG_IRREG(0, IRREG_CFG_IN), EXIT1_TO_IDLE,
-                        IDLE_TO_SHIFT_DR,
-                        DATAW(0, 4), SWAP32(SMAP_DUMMY),
-                        DATAW(0, 4), SWAP32(SMAP_SYNC),
-                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-                        DATAW(0, 4)),
-                      (uint8_t []){4, SWAP32(SMAP_TYPE1(SMAP_OP_READ, data, 1))},
-                      DITEM(DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
-                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
-                        DATAW(0, 4), SWAP32(SMAP_CMD_DESYNC),
-                        DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))), NULL},
-        DITEM(SHIFT_TO_EXIT1(0, 0), EXIT1_TO_IDLE,
-              JTAG_IRREG(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
-              IDLE_TO_SHIFT_DR,
-              DATAW(DREAD, 3), 0x00, 0x00, 0x00,
-              DATARWBIT, 0x06, 0x00,
-              SHIFT_TO_EXIT1(DREAD, 0),
-              SEND_IMMEDIATE ),
-        request_data, sizeof(request_data), 9999, NULL);
+    uint8_t *sendreq = catlist((uint8_t *[]){prefix,
+          DITEM(JTAG_IRREG_EXTRA(0, IRREG_CFG_IN), EXIT1_TO_IDLE,
+                 IDLE_TO_SHIFT_DR,
+                 DATAW(0, 4), SWAP32(SMAP_DUMMY),
+#ifdef USE_FTDI_232H
+                 DATAW(0, 7), 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, DATAWBIT, 0x06, 0x00, 
+#endif
+                 DATAW(0, 4), SWAP32(SMAP_SYNC),
+                 DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                 DATAW(0, 4)),
+          (uint8_t []){4, SWAP32(SMAP_TYPE1(SMAP_OP_READ, data, 1))},
+          DITEM(DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                 DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
+                 DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_WRITE, SMAP_REG_CMD, 1)),
+                 DATAW(0, 4), SWAP32(SMAP_CMD_DESYNC),
+                 DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0))),
+          DITEM(
+#ifdef USE_FTDI_232H
+                 DATAW(0, 4), INT32(0x04), SHIFT_TO_EXIT1(0, 0x80),
+#else
+                 DATAW(0, 3), 0x04, 0x00, 0x00, DATAWBIT, 0x06, 0x00, SHIFT_TO_EXIT1(0, 0),
+#endif
+                 EXIT1_TO_IDLE,
+                 JTAG_IRREG_EXTRA(0, IRREG_CFG_OUT), EXIT1_TO_IDLE,
+                 IDLE_TO_SHIFT_DR, DATAW(DREAD, 3), 0x00, 0x00, 0x00, DATARWBIT, 0x06, 0x00,
+#ifdef USE_FTDI_232H
+                 TMSRW, 0x01, 0x01,
+#else
+                 SHIFT_TO_EXIT1(DREAD, 0),
+#endif
+                 SEND_IMMEDIATE ),
+          NULL});
+    write_data(ftdi, sendreq+1, sendreq[0]);
     return read_data_int(ftdi, 5);
 }
 
