@@ -835,7 +835,7 @@ printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type)
 
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 2 + number_of_devices, number_of_devices);
     bypass_test(ftdi, DITEM(IDLE_TO_RESET,
-#ifndef USE_FTDI_232H
+#if 0 //ndef USE_FTDI_232H
         IN_RESET_STATE,
         0x86, 0x01, 0x00,
         SHIFT_TO_EXIT1(0, 0)
@@ -1043,7 +1043,6 @@ logfile = stdout;
 #endif
          ), cfg_in_command, 0xf0fe7910);
 #ifndef USE_FTDI_232H
-    static uint8_t i2reset[] = DITEM(IDLE_TO_RESET );
     write_data(ftdi, i2reset+1, i2reset[0]);
 #else
     bypass_test(ftdi, DITEM(IDLE_TO_RESET, SHIFT_TO_EXIT1(0, 0),), 3, 1);
