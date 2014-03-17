@@ -714,6 +714,8 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
 #endif
 };
 
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
+#if 1 //legacy doesnt work with new code ndef USE_FTDI_232H
     send_data_frame(ftdi, 0,
         (uint8_t *[]){DITEM(IDLE_TO_RESET), stat2, stat3, NULL},
         DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
@@ -721,6 +723,25 @@ static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat
             IDLE_TO_SHIFT_DR,
             COMMAND_ENDING),
         request_data, sizeof(request_data), 9999, NULL);
+#else
+uint8_t *req = catlist((uint8_t *[]){DITEM( IDLE_TO_RESET), stat2, stat3,
+    DITEM(
+#ifndef USE_FTDI_232H
+        RESET_TO_IDLE,
+        EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN, 0xff),
+        IDLE_TO_SHIFT_DR,
+#endif
+        DATAW(0, 0x14),
+            0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, 0x00, 0x14, 0x00, 0x07, 0x80,
+            INT32(0x00),
+        SHIFT_TO_UPDATE_TO_IDLE(0, 0),
+        EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_OUT, 0xff),
+        IDLE_TO_SHIFT_DR, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
+        SEND_IMMEDIATE),
+    NULL});
+    write_data(ftdi, req+1, req[0]);
+#endif
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     uint64_t ret40 = read_data_int(ftdi, 5);
     uint32_t status = ret40 >> 8;
     if (M(ret40) != 0x40 || status != expected)
