@@ -532,13 +532,18 @@ static void data_test(struct ftdi_context *ftdi)
                IDLE_TO_SHIFT_DR),
         DITEM(COMMAND_ENDING),
         NULL, NULL, NULL};
+#define ALEN (sizeof(alist)/sizeof(alist[0]))
     for (i = 0; i < 4; i++) {
+#ifndef USE_FTDI_232H
         if ((ret40 = fetch40(ftdi, catlist(alist))) != 0)
+#else
+        if ((ret40 = fetch32(ftdi, catlist(alist))) != 0)
+#endif
             printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
         if (i <= 1) {
-            alist[3] = alist[2];
-            alist[2] = alist[1];
-            alist[1] = added_item[i];
+            alist[ALEN-2] = alist[ALEN-3];
+            alist[ALEN-3] = alist[ALEN-4];
+            alist[ALEN-4] = added_item[i];
         }
     }
 }
@@ -827,22 +832,35 @@ printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type)
     /*
      * Step 5: Check Device ID
      */
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3, 1);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3, 1);
-printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 
+    bypass_test(ftdi, DITEM(IDLE_TO_RESET), 2 + number_of_devices, number_of_devices);
+    bypass_test(ftdi, DITEM(IDLE_TO_RESET,
+#ifndef USE_FTDI_232H
+        IN_RESET_STATE,
+        0x86, 0x01, 0x00,
+        SHIFT_TO_EXIT1(0, 0)
+#endif
+        ), 3, 1);
+#ifndef USE_FTDI_232H
     static uint8_t i2resetin[] = DITEM(IDLE_TO_RESET, IN_RESET_STATE);
     write_data(ftdi, i2resetin+1, i2resetin[0]);
     uint8_t command_set_divisor[] = { SET_CLOCK_DIVISOR };
     ftdi_write_data(ftdi, command_set_divisor, sizeof(command_set_divisor));
+#endif
 
     static uint8_t iddata[] = {INT32(0xffffffff),  PATTERN2};
     send_data_frame(ftdi, DREAD,
-        (uint8_t *[]){DITEM(RESET_TO_RESET, IN_RESET_STATE,
-             RESET_TO_RESET, IN_RESET_STATE,
-             RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
+        (uint8_t *[]){DITEM(
+#ifdef USE_FTDI_232H
+             IDLE_TO_RESET, IN_RESET_STATE,
+             0x86, 0x01, 0x00,
+             SHIFT_TO_EXIT1(0, 0),
+             IN_RESET_STATE,
+             SHIFT_TO_EXIT1(0, 0),
+#else
+             RESET_TO_RESET, IN_RESET_STATE, RESET_TO_RESET,
+#endif
+             IN_RESET_STATE, RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999, idcode_pattern2);
     return ftdi;
@@ -908,7 +926,11 @@ logfile = stdout;
 #endif
     for (i = 0; i < 3; i++) {
         ret16 = fetch16(ftdi, DITEM(
+#ifndef USE_FTDI_232H
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS, 0xff),
+#else
+              IDLE_TO_SHIFT_IR, DATAW(DREAD, 1), 0xff, DATARWBIT, 0x00, 0xff, SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80),
+#endif
               SEND_IMMEDIATE));
         if (ret16 == 0x118f)
             printf("xjtag: bypass first time %x\n", ret16);
@@ -925,7 +947,9 @@ logfile = stdout;
     bypass_test(ftdi, DITEM(RESET_TO_RESET), 3, 1);
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
+#ifndef USE_FTDI_232H
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
+#endif
     /*
      * Step 2: Initialization
      */
@@ -964,10 +988,19 @@ logfile = stdout;
     if ((ret40 = read_smap(ftdi, pulse_gpio(CLOCK_FREQUENCY/800/*1.25 msec*/), SMAP_REG_BOOTSTS)) != 0x0100000000)
         printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
     if ((ret16 = fetch16(ftdi, DITEM( EXIT1_TO_IDLE,
-            JTAG_IRREG_EXTRA(0, IRREG_BYPASS), EXIT1_TO_IDLE,
-            JTAG_IRREG_EXTRA(0, IRREG_JSTART), EXIT1_TO_IDLE,
-            TMSW_DELAY,
-            JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE))) != 0xd6ac)
+#ifdef USE_FTDI_232H
+             SHIFT_TO_EXIT1(0, 0x80),
+             EXIT1_TO_IDLE,
+#endif
+             JTAG_IRREG_EXTRA(0, IRREG_BYPASS), EXIT1_TO_IDLE,
+             JTAG_IRREG_EXTRA(0, IRREG_JSTART), EXIT1_TO_IDLE,
+             TMSW_DELAY,
+#ifdef USE_FTDI_232H
+              IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x3f, TMSRW, 0x01, 0x81,
+#else
+              JTAG_IRREG(DREAD, IRREG_BYPASS), 
+#endif
+              SEND_IMMEDIATE))) != 0xd6ac)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
 
     if ((ret40 = read_smap(ftdi, DITEM(
@@ -991,11 +1024,16 @@ logfile = stdout;
               EXIT1_TO_IDLE,
 #endif
               IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
+#ifndef USE_FTDI_232H
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS, 0xff),
+#else
+              IDLE_TO_SHIFT_IR, DATAW(DREAD, 1), 0xff, DATARWBIT, 0x00, 0xff,
+              SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80),
+#endif
               SEND_IMMEDIATE))) != 0xf5a9)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
 #ifndef USE_FTDI_232H
-    bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3, 1);
+    bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
 #endif
     read_status(ftdi, DITEM(IN_RESET_STATE,
 #ifdef USE_FTDI_232H
@@ -1007,6 +1045,9 @@ logfile = stdout;
 #ifndef USE_FTDI_232H
     static uint8_t i2reset[] = DITEM(IDLE_TO_RESET );
     write_data(ftdi, i2reset+1, i2reset[0]);
+#else
+    bypass_test(ftdi, DITEM(IDLE_TO_RESET, SHIFT_TO_EXIT1(0, 0),), 3, 1);
+printf("[%s:%d]\n", __FUNCTION__, __LINE__);
 #endif
     ftdi_deinit(ftdi);
 #ifndef USE_LIBFTDI
