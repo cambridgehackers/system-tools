@@ -655,7 +655,15 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
     int size, i;
     uint8_t *tailp = DITEM(SHIFT_TO_PAUSE);
     uint8_t *headerp =
-         DITEM( EXIT1_TO_IDLE, IDLE_TO_SHIFT_DR, DATAW(0, 4), INT32(0) );
+         DITEM( EXIT1_TO_IDLE,
+#ifdef USE_FTDI_232H
+              DATAWBIT, 0x02, 0xff, SHIFT_TO_EXIT1(0, 0x80), EXIT1_TO_IDLE,
+#endif
+              IDLE_TO_SHIFT_DR,
+#ifdef USE_FTDI_232H
+              DATAW(0, 7), INT32(0), 0x00, 0x00, 0x00, DATAWBIT, 0x06, 0x00,
+#endif
+              DATAW(0, 4), INT32(0));
     int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
 
     int packet_string = 11;
@@ -877,12 +885,27 @@ logfile = stdout;
     lseek(inputfd, 0, SEEK_SET);
     ftdi = initialize(idcode, serialno, CLOCK_FREQUENCY);
 
+#ifndef USE_FTDI_232H
     if ((ret40 = fetch40(ftdi,
         DITEM(FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-              EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USERCODE, 0xff),
+              EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_USERCODE, 0xfb),
               IDLE_TO_SHIFT_DR,
               COMMAND_ENDING))) != 0xffffffffff)
         printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
+#else
+    uint8_t *senddata = DITEM(
+        FORCE_RETURN_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
+        IDLE_TO_SHIFT_IR, DATAW(DREAD, 1), 0xff, DATARWBIT, 0x00, 0xff, SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80),
+        SEND_IMMEDIATE);
+    uint8_t *dresp = DITEM(0x51, 0x28, 0x05);
+    WRITE_READ(__LINE__, senddata, dresp);
+    senddata = DITEM(
+        EXTENDED_COMMAND(0, EXTEND_EXTRA | 0x108, 0xff),
+        IDLE_TO_SHIFT_DR, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
+        SEND_IMMEDIATE);
+    dresp = DITEM(0xff, 0xff, 0xff, 0xff);
+    WRITE_READ(__LINE__, senddata, dresp);
+#endif
     for (i = 0; i < 3; i++) {
         ret16 = fetch16(ftdi, DITEM(
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS, 0xff),
@@ -909,10 +932,16 @@ logfile = stdout;
     if ((ret16 = fetch16(ftdi,
         catlist((uint8_t *[]){
             DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
-               JTAG_IRREG(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
-               JTAG_IRREG(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
+               JTAG_IRREG_EXTRA(0, IRREG_JPROGRAM), EXIT1_TO_IDLE,
+               JTAG_IRREG_EXTRA(0, IRREG_ISC_NOOP), EXIT1_TO_IDLE),
             pulse_gpio(CLOCK_FREQUENCY/80/* 12.5 msec */),
-            DITEM( JTAG_IRREG(DREAD, IRREG_ISC_NOOP), SEND_IMMEDIATE),
+            DITEM(
+#ifndef USE_FTDI_232H
+                 JTAG_IRREG(DREAD, IRREG_ISC_NOOP),
+#else
+                 IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x14, TMSRW, 0x01, 0x01,
+#endif
+                 SEND_IMMEDIATE),
             NULL}))) != 0x4488)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
     /*
@@ -935,8 +964,8 @@ logfile = stdout;
     if ((ret40 = read_smap(ftdi, pulse_gpio(CLOCK_FREQUENCY/800/*1.25 msec*/), SMAP_REG_BOOTSTS)) != 0x0100000000)
         printf("[%s:%d] mismatch %" PRIx64 "\n", __FUNCTION__, __LINE__, ret40);
     if ((ret16 = fetch16(ftdi, DITEM( EXIT1_TO_IDLE,
-            JTAG_IRREG(0, IRREG_BYPASS), EXIT1_TO_IDLE,
-            JTAG_IRREG(0, IRREG_JSTART), EXIT1_TO_IDLE,
+            JTAG_IRREG_EXTRA(0, IRREG_BYPASS), EXIT1_TO_IDLE,
+            JTAG_IRREG_EXTRA(0, IRREG_JSTART), EXIT1_TO_IDLE,
             TMSW_DELAY,
             JTAG_IRREG(DREAD, IRREG_BYPASS), SEND_IMMEDIATE))) != 0xd6ac)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
@@ -952,13 +981,33 @@ logfile = stdout;
     write_data(ftdi, bypass_end+1, bypass_end[0]);
 #endif
     if ((ret16 = fetch16(ftdi,
-        DITEM(IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
+        DITEM(
+#ifdef USE_FTDI_232H
+              EXIT1_TO_IDLE,
+              SHIFT_TO_EXIT1(0, 0x80),
+              EXIT1_TO_IDLE,
+              IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0x3f, DATAWBIT, 0x02, 0xff,
+              SHIFT_TO_EXIT1(0, 0x80),
+              EXIT1_TO_IDLE,
+#endif
+              IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
               EXTENDED_COMMAND(DREAD, EXTEND_EXTRA | IRREG_BYPASS, 0xff),
               SEND_IMMEDIATE))) != 0xf5a9)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
+#ifndef USE_FTDI_232H
     bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3, 1);
-    read_status(ftdi, DITEM(IN_RESET_STATE, RESET_TO_RESET), cfg_in_command, 0xf0fe7910);
+#endif
+    read_status(ftdi, DITEM(IN_RESET_STATE,
+#ifdef USE_FTDI_232H
+         SHIFT_TO_EXIT1(0, 0),
+#else
+         RESET_TO_RESET
+#endif
+         ), cfg_in_command, 0xf0fe7910);
+#ifndef USE_FTDI_232H
+    static uint8_t i2reset[] = DITEM(IDLE_TO_RESET );
     write_data(ftdi, i2reset+1, i2reset[0]);
+#endif
     ftdi_deinit(ftdi);
 #ifndef USE_LIBFTDI
     libusb_close (usbhandle);
