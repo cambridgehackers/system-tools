@@ -69,6 +69,8 @@ multiline = {}
 multiline['TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00'] = 'TMS_WAIT'
 multiline['),\n        INT32('] = '), INT32('
 multiline['IDLE_TO_SHIFT_IR,\n    DATA'] = 'IDLE_TO_SHIFT_IR, DATA'
+multiline['IDLE_TO_SHIFT_IR,\n    DATAWBIT, 0x05, 0xff,\n    DATAWBIT, 0x02'] = 'TEMPFOO1(0)'
+multiline['IDLE_TO_SHIFT_DR,\n    DATAWBIT, 0x00, 0x00'] = 'TEMPFOO2(0)'
 
 int32template = '        0x02, 0x08, 0x00, 0xc0,'
 #                          23    89    45    01
