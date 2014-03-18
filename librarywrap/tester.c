@@ -56,7 +56,6 @@
 #define USBSIO_SET_BITMODE_REQUEST       11
 
 static libusb_device_handle *usbhandle = NULL;
-static unsigned char usbreadbuffer[USB_CHUNKSIZE];
 static FILE *logfile;
 static int logall = 1;
 static int datafile_fd = -1;
@@ -90,6 +89,7 @@ struct ftdi_context {
 };
 struct ftdi_transfer_control {
 };
+static unsigned char usbreadbuffer[USB_CHUNKSIZE];
 #define ftdi_deinit(A)
 #define ftdi_transfer_data_done(A) (void)(A)
 #define ftdi_set_usbdev(A,B)
@@ -670,13 +670,9 @@ static void send_data_file(struct ftdi_context *ftdi, int inputfd)
 #endif
               DATAW(0, 4), INT32(0));
     int limit_len = MAX_SINGLE_USB_DATA - headerp[0];
-
-    int packet_string = 11;
-int packet_count = 0;
     printf("Starting to send file\n");
     do {
         static uint8_t filebuffer[FILE_READSIZE];
-//fprintf(logfile, "[%s:%d] packetcount %d\n", __FUNCTION__, __LINE__, packet_count++);
         size = read(inputfd, filebuffer, FILE_READSIZE);
         if (size < FILE_READSIZE)
             tailp = DITEM(
@@ -693,54 +689,41 @@ int packet_count = 0;
         send_data_frame(ftdi, 0, (uint8_t *[]){headerp, NULL}, tailp, filebuffer, size, limit_len, NULL);
         headerp = DITEM(PAUSE_TO_SHIFT);
         limit_len = MAX_SINGLE_USB_DATA;
-#if 0
-//fprintf(logfile, "[%s:%d] packetst %d\n", __FUNCTION__, __LINE__, packet_string);
-        if (--packet_string <= 0) {
-            bypass_test(ftdi, DITEM( IDLE_TO_RESET), 3, 1);
-            packet_string = 13;
-        }
-#endif
     } while(size == FILE_READSIZE);
     printf("Done sending file\n");
 }
 
 static void read_status(struct ftdi_context *ftdi, uint8_t *stat2, uint8_t *stat3, uint32_t expected)
 {
-    static uint8_t request_data[] = {
-         SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)),
-         SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1)), SWAP32(0),
-#ifdef USE_FTDI_232H
-0
-#endif
-};
-
+#define STATREQ \
+         SWAP32(SMAP_DUMMY), SWAP32(SMAP_SYNC), SWAP32(SMAP_TYPE2(0)), \
+         SWAP32(SMAP_TYPE1(SMAP_OP_READ, SMAP_REG_STAT, 1))
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
-#if 1 //legacy doesnt work with new code ndef USE_FTDI_232H
-    send_data_frame(ftdi, 0,
-        (uint8_t *[]){DITEM(IDLE_TO_RESET), stat2, stat3, NULL},
-        DITEM(SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-            EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_OUT, 0xff),
-            IDLE_TO_SHIFT_DR,
-            COMMAND_ENDING),
-        request_data, sizeof(request_data), 9999, NULL);
-#else
-uint8_t *req = catlist((uint8_t *[]){DITEM( IDLE_TO_RESET), stat2, stat3,
+uint8_t *req = catlist((uint8_t *[]){
+    DITEM(IDLE_TO_RESET), stat2, stat3,
     DITEM(
-#ifndef USE_FTDI_232H
+#ifdef USE_FTDI_232H
         RESET_TO_IDLE,
         EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN, 0xff),
         IDLE_TO_SHIFT_DR,
+        DATAW(0, 20), STATREQ,
+#else
+        DATAW(0, 19), STATREQ,
+             0x00, 0x00, 0x00,
+        DATAWBIT, 0x06, 0x00,
 #endif
-        DATAW(0, 0x14),
-            0xff, 0xff, 0xff, 0xff, 0x55, 0x99, 0xaa, 0x66, 0x02, 0x00, 0x00, 0x00, 0x14, 0x00, 0x07, 0x80,
-            INT32(0x00),
         SHIFT_TO_UPDATE_TO_IDLE(0, 0),
         EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_OUT, 0xff),
+#ifdef USE_FTDI_232H
         IDLE_TO_SHIFT_DR, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-        SEND_IMMEDIATE),
+        SEND_IMMEDIATE
+#else
+        IDLE_TO_SHIFT_DR,
+        COMMAND_ENDING
+#endif
+        ),
     NULL});
     write_data(ftdi, req+1, req[0]);
-#endif
 printf("[%s:%d]\n", __FUNCTION__, __LINE__);
     uint64_t ret40 = read_data_int(ftdi, 5);
     uint32_t status = ret40 >> 8;
