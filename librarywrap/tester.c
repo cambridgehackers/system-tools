@@ -27,8 +27,8 @@
 //     ug470_7Series_Config.pdf
 
 // for using libftdi.so
-#define USE_LIBFTDI
-//#define USE_FTDI_232H
+//#define USE_LIBFTDI
+#define USE_FTDI_232H
 
 #include <stdio.h>
 #include <string.h>
@@ -472,6 +472,22 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 
 #define LOADIRDR_3_7(A) \
     LOADIR(A), LOADDR_3_7
+
+static void shift_out(struct ftdi_context *ftdi)
+{
+int i;
+uint8_t *senddata, *dresp;
+for (i = 0; i < 2; i++) {
+    senddata = DITEM(
+          TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
+          IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
+          IDLE_TO_SHIFT_DR, DATAWBIT, 0x05, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0),
+          IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
+          SEND_IMMEDIATE);
+dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
+    WRITE_READ(__LINE__, senddata, dresp);
+}
+}
 static void string_test(struct ftdi_context *ftdi, int count, int extra)
 {
 int i;
@@ -485,27 +501,16 @@ if (extra == 2) {
           LOADDR_3_7,);
 dresp = DITEM( 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(
-          LOADIRDR(0xfa, 0, 0x04, 0x00, 0),
-          LOADIRDR(0xfb, DREAD, 0x01, 0x00, 0),
-          LOADIRDR_3_7(0xfa),);
+    senddata = DITEM( LOADIRDR(0xfa, 0, 0x04, 0x00, 0), LOADIRDR(0xfb, DREAD, 0x01, 0x00, 0), LOADIRDR_3_7(0xfa),);
 dresp = DITEM( 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x02, 0x00, 0x04, 0x01, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc,);
     WRITE_READ(__LINE__, senddata, dresp);
-senddata = DITEM(
-          LOADIRDR(0xfa, 0, 0x08000004, 0x00, 0),
-          LOADIRDR(0xfb, DREAD, 0x01, 0x00, 0),
-          LOADIRDR_3_7(0xfa),);
+senddata = DITEM( LOADIRDR(0xfa, 0, 0x08000004, 0x00, 0), LOADIRDR(0xfb, DREAD, 0x01, 0x00, 0), LOADIRDR_3_7(0xfa),);
 dresp = DITEM( 0x02, 0x00, 0x00, 0x08, 0x02, 0x00, 0x12, 0x02, 0x00, 0x00, 0x00, 0xe0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM( LOADIRDR(0xfa, 0, 0x04, 0x00, 0),
-          LOADIRDR(0xfb, DREAD, 0x10, 0x00, 0),
-               LOADIRDR_3_7(0xfa));
+    senddata = DITEM( LOADIRDR(0xfa, 0, 0x04, 0x00, 0), LOADIRDR(0xfb, DREAD, 0x10, 0x00, 0), LOADIRDR_3_7(0xfa));
 dresp = DITEM( 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x02, 0x00, 0x00, 0x00, 0xe0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(
-          LOADIRDR(0xfa, 0, 0x08000004, 0x00, 0),
-          LOADIRDR(0xfb, DREAD, 0x10, 0x04, 0x80),
-          LOADIRDR_3_7(0xfa));
+    senddata = DITEM( LOADIRDR(0xfa, 0, 0x08000004, 0x00, 0), LOADIRDR(0xfb, DREAD, 0x10, 0x04, 0x80), LOADIRDR_3_7(0xfa));
 dresp = DITEM( 0x02, 0x00, 0x00, 0x08, 0x02, 0x00, 0x12, 0x02, 0x00, 0x00, 0x00, 0xe0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
     WRITE_READ(__LINE__, senddata, dresp);
     senddata = DITEM(
@@ -589,6 +594,7 @@ dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
           SEND_IMMEDIATE);
 dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
     WRITE_READ(__LINE__, senddata, dresp);
+for (i = 0; i < 2; i++) {
     senddata = DITEM(
           TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
@@ -597,14 +603,7 @@ dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
           SEND_IMMEDIATE);
 dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(
-          TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_DR, DATAWBIT, 0x05, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          SEND_IMMEDIATE);
-dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
-    WRITE_READ(__LINE__, senddata, dresp);
+}
     senddata = DITEM(
           TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
@@ -618,6 +617,7 @@ dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
           SEND_IMMEDIATE);
 dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
     WRITE_READ(__LINE__, senddata, dresp);
+for (i = 0; i < 2; i++) {
     senddata = DITEM(
           TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
@@ -626,14 +626,7 @@ dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
           SEND_IMMEDIATE);
 dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(
-          TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_DR, DATAWBIT, 0x05, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          SEND_IMMEDIATE);
-dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
-    WRITE_READ(__LINE__, senddata, dresp);
+}
     senddata = DITEM(
           TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
@@ -648,22 +641,7 @@ dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
           SEND_IMMEDIATE);
 dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(
-          TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_DR, DATAWBIT, 0x05, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          SEND_IMMEDIATE);
-dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
-    WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(
-          TEMPLOADIR(0), 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
-          IDLE_TO_SHIFT_DR, DATAWBIT, 0x05, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
-          SEND_IMMEDIATE);
-    dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
-    WRITE_READ(__LINE__, senddata, dresp);
+    shift_out(ftdi);
 }
     senddata = DITEM(
            LOADIRDR(0xf8, 0, 0x08, 0x00, 0),
