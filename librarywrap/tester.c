@@ -197,7 +197,6 @@ int i;
      TMSW | (READA), 0x02, ((A) | 0x03)    /* Shift-DR -> Update-DR -> Idle */
 #define FORCE_RETURN_TO_RESET TMSW, 0x04, 0x1f /* go back to TMS reset state */
 #define RESET_TO_SHIFT_DR     TMSW, 0x03, 0x02  /* Reset -> Shift-DR */
-#define RESET_TO_RESET        TMSW, 0x00, 0x01
 #define TMS_WAIT \
          TMSW, 0x06, 0x00, TMSW, 0x06, 0x00, TMSW, 0x06, 0x00
 #define TMSW_DELAY                                             \
@@ -442,7 +441,7 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 
 #ifdef USE_FTDI_232H
 #define WRITE_READ(LL, A,B) \
-    /*printf("[%d]\n", LL);*/ \
+    printf("[%d]\n", LL); \
     write_data(ftdi, (A)+1, (A)[0]); \
     check_read_data(ftdi, (B));
 #define TEMPLOADIR(A) \
@@ -489,32 +488,24 @@ uint8_t *senddata, *dresp;
         dresp = DITEM(0x02, 0x00, 0x00, 0x08, 0x02, 0x00, 0x12, 0x02, INT32(0), 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
         WRITE_READ(__LINE__, senddata, dresp);
     }
-    senddata = DITEM(LOADIRDR(0xfb, 0, 0x004818a2, 4, 0x80), DR_WAIT,
+    uint32_t offset = 0;
+    for (i = 0; i < 2; i++) {
+        senddata = DITEM(LOADIRDR(0xfb, 0, 0x004818a2 | offset, 4, 0x80), DR_WAIT,
                      LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
-                     LOADDR(DREAD, 0x00480442, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x00480442 | offset, 4, 0x80), DR_WAIT,
                      LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
                      LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x12, 0x02, INT32(0), 0x0a, INT32(0), 0x00, 0x0a, INT32(0), 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
+        dresp = DITEM(0x12, 0x02, INT32(0), 0x0a, INT32(0), 0x00, 0x0a, INT32(0), 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+        WRITE_READ(__LINE__, senddata, dresp);
 
-    senddata = DITEM(LOADIRDR(0xfb, 0, 0x00480422, 4, 0x80), DR_WAIT,
+        senddata = DITEM(LOADIRDR(0xfb, 0, 0x00480422 | offset, 4, 0x80), DR_WAIT,
                      LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
                      LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
+        dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+        WRITE_READ(__LINE__, senddata, dresp);
 
-    senddata = DITEM(LOADIRDR(0xfb, 0, 0x004918a2, 4, 0x80), DR_WAIT,
-                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
-                     LOADDR(DREAD, 0x00490442, 4, 0x80), DR_WAIT,
-                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
-                     LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, INT32(0), 0x00, 0x0a, INT32(0), 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(LOADIRDR(0xfb, 0, 0x00490422, 4, 0x80), DR_WAIT,
-                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
-                     LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
+    offset = 0x10000;
+    }
 }
 #endif
 
@@ -658,11 +649,11 @@ int i;
     );
     uint8_t *initialstr = (found_232H) ? initialize_sequence_232h : initialize_sequence;
     ftdi_write_data(ftdi, initialstr+1, initialstr[0]);
-    uint8_t *move_to_reset = DITEM(RESET_TO_RESET);
+    uint8_t *move_to_reset = DITEM(SHIFT_TO_EXIT1(0, 0));
     i = number_of_devices;
     while (i--) {
         check_idcode(ftdi, move_to_reset, idcode);
-        move_to_reset = DITEM(TMSW, 0x02, 0x07);
+        move_to_reset = DITEM(IDLE_TO_RESET);
     }
     return ftdi;
 }
@@ -882,12 +873,10 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
 #ifdef USE_FTDI_232H
              IDLE_TO_RESET, IN_RESET_STATE,
              0x86, 0x01, 0x00,
+#endif
              SHIFT_TO_EXIT1(0, 0),
              IN_RESET_STATE,
              SHIFT_TO_EXIT1(0, 0),
-#else
-             RESET_TO_RESET, IN_RESET_STATE, RESET_TO_RESET,
-#endif
              IN_RESET_STATE, RESET_TO_IDLE, IDLE_TO_SHIFT_DR), NULL},
         DITEM(PAUSE_TO_SHIFT, SEND_IMMEDIATE),
         iddata, sizeof(iddata), 9999, idcode_pattern2);
@@ -972,7 +961,7 @@ logfile = stdout;
     read_status(ftdi, cfg_in_command, DITEM(), 0x30861900);
     static uint8_t i2reset[] = DITEM(IDLE_TO_RESET );
     write_data(ftdi, i2reset+1, i2reset[0]);
-    bypass_test(ftdi, DITEM(RESET_TO_RESET), 3, 1);
+    bypass_test(ftdi, DITEM(SHIFT_TO_EXIT1(0, 0)), 3, 1);
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
 #ifndef USE_FTDI_232H
@@ -1062,13 +1051,7 @@ logfile = stdout;
 #ifndef USE_FTDI_232H
     bypass_test(ftdi, DITEM(IDLE_TO_RESET), 3, 1);
 #endif
-    read_status(ftdi, DITEM(IN_RESET_STATE,
-#ifdef USE_FTDI_232H
-         SHIFT_TO_EXIT1(0, 0),
-#else
-         RESET_TO_RESET
-#endif
-         ), cfg_in_command, 0xf0fe7910);
+    read_status(ftdi, DITEM(IN_RESET_STATE, SHIFT_TO_EXIT1(0, 0)), cfg_in_command, 0xf0fe7910);
 #ifndef USE_FTDI_232H
     write_data(ftdi, i2reset+1, i2reset[0]);
 #else
