@@ -440,6 +440,87 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
     SEND_IMMEDIATE
 #endif
 
+#ifdef USE_FTDI_232H
+#define WRITE_READ(LL, A,B) \
+    /*printf("[%d]\n", LL);*/ \
+    write_data(ftdi, (A)+1, (A)[0]); \
+    check_read_data(ftdi, (B));
+#define TEMPLOADIR(A) \
+    IDLE_TO_SHIFT_IR, \
+    DATAWBIT, 0x05, 0xff, \
+    DATAWBIT, 0x02
+//JTAG_IRREG
+#define TEMPLOADDR(A) \
+    IDLE_TO_SHIFT_DR, \
+    DATAWBIT, 0x00, 0x00
+#define LOADIR(A) \
+    TEMPLOADIR(0), (A), TMSW, 0x01, 0x83
+#define LOADDR(AREAD, A, B, C) \
+    TEMPLOADDR(0), DATAW((AREAD), 4), INT32(A), \
+    DATAWBIT | (AREAD), 0x01, (B),\
+    SHIFT_TO_UPDATE_TO_IDLE((AREAD),(C))
+
+#define DR_WAIT RESET_TO_IDLE, TMS_WAIT, TMSW, 0x02, 0x00
+
+#define LOADIRDR(IRA, AREAD, A, B, C) \
+    LOADIR(IRA), LOADDR(AREAD, A, B, C)
+
+#define LOADDR_3_7 \
+    LOADDR(DREAD, 0x03, 0, 0), LOADDR(DREAD, 0x07, 0, 0), SEND_IMMEDIATE
+
+#define LOADIRDR_3_7(A) \
+    LOADIR(A), LOADDR_3_7
+static void string_test(struct ftdi_context *ftdi, int count)
+{
+uint8_t *senddata, *dresp;
+    while (count--) {
+        senddata = DITEM(LOADIRDR(0xf8, 0, 0x08, 0, 0),
+                     LOADIRDR(0xfa, 0, 0x8000019a, 2, 0),
+                     LOADIRDR(0xfa, 0, 0x03, 0, 0),
+                     LOADDR_3_7);
+        dresp = DITEM(0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+        WRITE_READ(__LINE__, senddata, dresp);
+        senddata = DITEM(LOADIRDR(0xfa, 0, 0x04, 0, 0),
+                     LOADIRDR(0xfb, DREAD, 0x01, 0, 0),
+                     RESET_TO_IDLE, TMS_WAIT, TMSW, 0x03, 0x00,
+                     LOADIRDR_3_7(0xfa));
+        dresp = DITEM(0x02, INT32(0), 0x00, 0x12, 0x06, 0x00, 0x04, 0x01, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+        WRITE_READ(__LINE__, senddata, dresp);
+        senddata = DITEM(LOADIRDR(0xfa, 0, 0x08000004, 0, 0),
+                     LOADIRDR(0xfb, DREAD, 0x01, 0, 0), DR_WAIT,
+                     LOADIRDR_3_7(0xfa));
+        dresp = DITEM(0x02, 0x00, 0x00, 0x08, 0x02, 0x00, 0x12, 0x02, INT32(0), 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+        WRITE_READ(__LINE__, senddata, dresp);
+    }
+    senddata = DITEM(LOADIRDR(0xfb, 0, 0x004818a2, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
+                     LOADDR(DREAD, 0x00480442, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
+                     LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x12, 0x02, INT32(0), 0x0a, INT32(0), 0x00, 0x0a, INT32(0), 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+
+    senddata = DITEM(LOADIRDR(0xfb, 0, 0x00480422, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
+                     LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+
+    senddata = DITEM(LOADIRDR(0xfb, 0, 0x004918a2, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
+                     LOADDR(DREAD, 0x00490442, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
+                     LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, INT32(0), 0x00, 0x0a, INT32(0), 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+    senddata = DITEM(LOADIRDR(0xfb, 0, 0x00490422, 4, 0x80), DR_WAIT,
+                     LOADDR(DREAD, 0x07, 0, 0), DR_WAIT,
+                     LOADIRDR_3_7(0xfa));
+    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
+    WRITE_READ(__LINE__, senddata, dresp);
+}
+#endif
+
 //idcode for cortex 0x4ba00477
 static uint8_t idcode_pattern1[] = DITEM( INT32(0), PATTERN1, 0x00); // starts with idcode
 static uint8_t idcode_pattern2[] = DITEM( INT32(0), PATTERN2, 0xff); // starts with idcode
@@ -482,38 +563,6 @@ static void check_idcode(struct ftdi_context *ftdi, uint8_t *statep, uint32_t id
         memdump(rdata, idcode_pattern1[0], "ACTUAL");
     }
 }
-#define WRITE_READ(LL, A,B) \
-    /*printf("[%d]\n", LL);*/ \
-    write_data(ftdi, (A)+1, (A)[0]); \
-    check_read_data(ftdi, (B));
-#define TEMPLOADIR(A) \
-    IDLE_TO_SHIFT_IR, \
-    DATAWBIT, 0x05, 0xff, \
-    DATAWBIT, 0x02
-#define TEMPLOADDR(A) \
-    IDLE_TO_SHIFT_DR, \
-    DATAWBIT, 0x00, 0x00
-#define LOADIR(A) \
-    TEMPLOADIR(0), (A), TMSW, 0x01, 0x83
-#define LOADDR(AREAD, A, B, C) \
-    TEMPLOADDR(0), DATAW((AREAD), 4), INT32(A), \
-    DATAWBIT | (AREAD), 0x01, (B),\
-    SHIFT_TO_UPDATE_TO_IDLE((AREAD),(C))
-#define LOADDR_WAIT(AREAD, A, B, C) \
-        LOADDR(AREAD, A, B, C), \
-        RESET_TO_IDLE, TMS_WAIT, TMSW, 0x02, 0x00
-
-#define LOADIRDR(IRA, AREAD, A, B, C) \
-    LOADIR(IRA), LOADDR(AREAD, A, B, C)
-
-#define LOADIRDR_WAIT(IRA, AREAD, A, B, C) \
-    LOADIR(IRA), LOADDR_WAIT(AREAD, A, B, C)
-
-#define LOADDR_3_7 \
-    LOADDR(DREAD, 0x03, 0, 0), LOADDR(DREAD, 0x07, 0, 0), SEND_IMMEDIATE
-
-#define LOADIRDR_3_7(A) \
-    LOADIR(A), LOADDR_3_7
 
 static void data_test(struct ftdi_context *ftdi)
 {
@@ -547,49 +596,15 @@ static void data_test(struct ftdi_context *ftdi)
         }
     }
 }
-#ifdef USE_FTDI_232H
-static void string_test3(struct ftdi_context *ftdi)
-{
-    uint8_t *dresp = DITEM(0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-uint8_t *senddata = DITEM(LOADIRDR(0xf8, 0, 0x08, 0, 0), LOADIRDR(0xfa, 0, 0x8000019a, 2, 0), LOADIRDR(0xfa, 0, 0x03, 0, 0), LOADDR_3_7);
-    WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(LOADIRDR(0xfa, 0, 0x04, 0, 0), LOADIRDR(0xfb, DREAD, 0x01, 0, 0), RESET_TO_IDLE, TMS_WAIT, TMSW, 0x03, 0x00, LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x06, 0x00, 0x04, 0x01, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(LOADIRDR(0xfa, 0, 0x08000004, 0, 0), LOADIRDR_WAIT(0xfb, DREAD, 0x01, 0, 0), LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x02, 0x00, 0x00, 0x08, 0x02, 0x00, 0x12, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-}
-static void string_test(struct ftdi_context *ftdi, int count)
-{
-    while (count--)
-        string_test3(ftdi);
-uint8_t *senddata, *dresp;
-    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x004818a2, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADDR_WAIT(DREAD, 0x00480442, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x12, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-
-    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x00480422, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-
-    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x004918a2, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADDR_WAIT(DREAD, 0x00490442, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM(LOADIRDR_WAIT(0xfb, 0, 0x00490422, 4, 0x80), LOADDR_WAIT(DREAD, 0x07, 0, 0), LOADIRDR_3_7(0xfa));
-    dresp = DITEM(0x12, 0x00, 0x86, 0x18, 0x06, 0x00, 0x02, 0xa0, 0x0d, 0x00, 0x80, 0xf0, 0x0a, 0x00, 0x00, 0x80, 0xe0, 0xfc);
-    WRITE_READ(__LINE__, senddata, dresp);
-}
-#else
-#define string_test(A, B)
-#endif
 static void bypass_test(struct ftdi_context *ftdi, uint8_t *statep, int j, int str_count)
 {
     check_idcode(ftdi, statep, 0); // idcode parameter ignored, since this is not the first invocation
     while (j-- > 0) {
         data_test(ftdi);
     }
+#ifdef USE_FTDI_232H
     string_test(ftdi, str_count);
+#endif
 }
 
 /*
@@ -740,7 +755,7 @@ static uint64_t read_smap(struct ftdi_context *ftdi, uint8_t *prefix, uint32_t d
                  IDLE_TO_SHIFT_DR,
                  DATAW(0, 4), SWAP32(SMAP_DUMMY),
 #ifdef USE_FTDI_232H
-                 DATAW(0, 7), 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, DATAWBIT, 0x06, 0x00, 
+                 DATAW(0, 7), INT32(0), 0x00, 0x00, 0x00, DATAWBIT, 0x06, 0x00, 
 #endif
                  DATAW(0, 4), SWAP32(SMAP_SYNC),
                  DATAW(0, 4), SWAP32(SMAP_TYPE1(SMAP_OP_NOP, 0,0)),
@@ -817,8 +832,8 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
     libusb_free_config_descriptor (config_descrip);
     libusb_detach_kernel_driver(usbhandle, 0);
 #define USBCTRL(A,B,C) \
-     libusb_control_transfer(usbhandle, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT,\
-           (A), (B), (C) | USB_INDEX, NULL, 0, USB_TIMEOUT)
+     libusb_control_transfer(usbhandle, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE \
+           | LIBUSB_ENDPOINT_OUT, (A), (B), (C) | USB_INDEX, NULL, 0, USB_TIMEOUT)
 
     if (libusb_get_configuration (usbhandle, &cfg) < 0
      || (desc.bNumConfigurations > 0 && cfg != configv && libusb_set_configuration(usbhandle, configv) < 0)
@@ -832,11 +847,12 @@ static struct ftdi_context *initialize(uint32_t idcode, const char *serialno, ui
      || USBCTRL(USBSIO_RESET, USBSIO_RESET_PURGE_TX, 0) < 0)
         goto error;
     //(desc.bcdDevice == 0x700) //kc       TYPE_2232H
-printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type);
+    printf("[%s:%d] bcd %x type %d\n", __FUNCTION__, __LINE__, desc.bcdDevice, type);
     if (desc.bcdDevice == 0x900) //zedboard TYPE_232H
         found_232H = 1;
     for (i = 0; i < sizeof(bitswap); i++)
         bitswap[i] = BSWAP(i);
+
     /*
      * Initialize FTDI chip and GPIO pins
      */
@@ -977,6 +993,7 @@ logfile = stdout;
                  JTAG_IRREG(DREAD, IRREG_ISC_NOOP),
 #else
                  IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x14, TMSRW, 0x01, 0x01,
+//JTAG_IRREG
 #endif
                  SEND_IMMEDIATE),
             NULL}))) != 0x4488)
@@ -991,6 +1008,7 @@ logfile = stdout;
 #else
          EXIT1_TO_IDLE, DATAWBIT, 0x02, 0xff, SHIFT_TO_EXIT1(0, 0x80),
          EXIT1_TO_IDLE, IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x05, TMSRW, 0x01, 0x01,
+//JTAG_IRREG
 #endif
              SEND_IMMEDIATE))) != 0x458a)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
@@ -1010,6 +1028,7 @@ logfile = stdout;
              TMSW_DELAY,
 #ifdef USE_FTDI_232H
               IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x3f, TMSRW, 0x01, 0x81,
+//JTAG_IRREG
 #else
               JTAG_IRREG(DREAD, IRREG_BYPASS), 
 #endif
@@ -1033,6 +1052,7 @@ logfile = stdout;
               SHIFT_TO_EXIT1(0, 0x80),
               EXIT1_TO_IDLE,
               IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0x3f, DATAWBIT, 0x02, 0xff,
+//JTAG_IRREG_EXTRA
               SHIFT_TO_EXIT1(0, 0x80),
               EXIT1_TO_IDLE,
 #endif
