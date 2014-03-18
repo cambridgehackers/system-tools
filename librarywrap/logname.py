@@ -64,13 +64,52 @@ formatmap.append(['TMSW, 0x01, 0x01', 'PAUSE_TO_SHIFT'])
 formatmap.append(['TMSW, 0x01, 0x01', 'SHIFT_TO_PAUSE'])
 formatmap.append(['TMSW, 0x04, 0x7f', 'TMS_RESET_WEIRD'])
 
-multiline = {}
-#multiline['READ 0xfa,\nREAD '] = 'READ 0xfa, '
-multiline['TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00'] = 'TMS_WAIT'
-multiline['),\n        INT32('] = '), INT32('
-multiline['IDLE_TO_SHIFT_IR,\n    DATA'] = 'IDLE_TO_SHIFT_IR, DATA'
-multiline['IDLE_TO_SHIFT_IR,\n    DATAWBIT, 0x05, 0xff,\n    DATAWBIT, 0x02'] = 'TEMPLOADIR(0)'
-multiline['IDLE_TO_SHIFT_DR,\n    DATAWBIT, 0x00, 0x00'] = 'TEMPLOADDR(0)'
+multiline = []
+multiline.append(['TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00,\n    TMSW, 0x06, 0x00', 'TMS_WAIT'])
+multiline.append(['),\n        INT32(', '), INT32('])
+multiline.append(['IDLE_TO_SHIFT_IR,\n    DATA', 'IDLE_TO_SHIFT_IR, DATA'])
+multiline.append(['IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xff, DATAWBIT, 0x02', 'TEMPLOADIR(0)'])
+multiline.append(['IDLE_TO_SHIFT_DR,\n    DATA', 'IDLE_TO_SHIFT_DR, DATA'])
+multiline.append(['IDLE_TO_SHIFT_DR, DATAWBIT, 0x00, 0x00', 'TEMPLOADDR(0)'])
+
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x18060016),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x18060016, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x18860016),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x18860016, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x07),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x07, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x03),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x03, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x08000004),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x08000004, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x10),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x10, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0xc0000802),\n    DATARWBIT, 0x01, 0x07,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0xc0000802, 0x07, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x00490142),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x00490142, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x00490002),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x00490002, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x004918a2),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x004918a2, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x00480002),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x00480002, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x004818a2),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x004818a2, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x00480442),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x00480442, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x08),\n    DATAWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0)', 'LOADDR(0, 0x08, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x03),\n    DATAWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0)', 'LOADDR(0, 0x03, 0x00, 0)'])
+
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x08000004),\n    DATAWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0)', 'LOADDR(0, 0x08000004, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x04),\n    DATAWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0)', 'LOADDR(0, 0x04, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x10),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x10, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0xc0000902),\n    DATARWBIT, 0x01, 0x07,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0xc0000902, 0x07, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x08000004),\n    DATAWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0)', 'LOADDR(0, 0x00490442, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x00490442),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x00490442, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x00490442),\n    DATAWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)', 'LOADDR(0, 0x00490442, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x00480422),\n    DATAWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80', 'LOADDR(0, 0x00480422, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x004918a2),\n    DATAWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)', 'LOADDR(0, 0x004918a2, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x8000019a),\n    DATAWBIT, 0x01, 0x02,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0)', 'LOADDR(0, 0x8000019a, 0x02, 0)'])
+
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x01),\n    DATARWBIT, 0x01, 0x00,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0)', 'LOADDR(DREAD, 0x01, 0x00, 0)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0xc0038402),\n    DATAWBIT, 0x01, 0x07,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)', 'LOADDR(0, 0xc0038402, 0x07, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(DREAD, 4), INT32(0x00480142),\n    DATARWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0x80)', 'LOADDR(DREAD, 0x00480142, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x00480442),\n    DATAWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)', 'LOADDR(0, 0x00480442, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x00490422),\n    DATAWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)', 'LOADDR(0, 0x00490422, 0x04, 0x80)'])
+multiline.append(['TEMPLOADDR(0), DATAW(0, 4), INT32(0x004818a2),\n    DATAWBIT, 0x01, 0x04,\n    SHIFT_TO_UPDATE_TO_IDLE(0, 0x80)', 'LOADDR(0, 0x004818a2, 0x04, 0x80)'])
+
+multiline.append(['TEMPLOADIR(0), 0xff,\n    TMSW, 0x01, 0x83', 'LOADIR(0xff)'])
+multiline.append(['TEMPLOADIR(0), 0xf8,\n    TMSW, 0x01, 0x83', 'LOADIR(0xf8)'])
+multiline.append(['TEMPLOADIR(0), 0xfa,\n    TMSW, 0x01, 0x83', 'LOADIR(0xfa)'])
+multiline.append(['TEMPLOADIR(0), 0xfb,\n    TMSW, 0x01, 0x83', 'LOADIR(0xfb)'])
 
 int32template = '        0x02, 0x08, 0x00, 0xc0,'
 #                          23    89    45    01
@@ -101,7 +140,7 @@ if __name__=='__main__':
             else:
                 outline = outline + '\n' + temp
             lastline = temp
-        for item in multiline.iterkeys():
-            outline = outline.replace(item, multiline[item])
+        for item in multiline:
+            outline = outline.replace(item[0], item[1])
         print(outline)
 
