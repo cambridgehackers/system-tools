@@ -382,8 +382,8 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 /*
  * Xilinx constants
  */
-//#define CLOCK_FREQUENCY      15000000
-#define CLOCK_FREQUENCY      30000000
+#define CLOCK_FREQUENCY      15000000
+//#define CLOCK_FREQUENCY      30000000
 #define MAX_PACKET_STRING    10
 
 #define IRREG_USER2          (IRREG_EXTRABIT | 0x003)
@@ -446,10 +446,7 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
     write_data(ftdi, (A)+1, (A)[0]); \
     check_read_data(ftdi, (B));
 #define TEMPLOADIR(A) \
-    IDLE_TO_SHIFT_IR, \
-    DATAWBIT, 0x05, 0xff, \
-    DATAWBIT, 0x02
-//JTAG_IRREG
+    IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xff, DATAWBIT, 0x02 //JTAG_IRREG
 #define TEMPLOADDR(A) \
     IDLE_TO_SHIFT_DR, \
     DATAWBIT, 0x00, 0x00
@@ -718,10 +715,12 @@ uint8_t *req = catlist((uint8_t *[]){
     DITEM(IDLE_TO_RESET), stat2, stat3,
     DITEM(
 #ifdef USE_FTDI_232H
+#if 0
         RESET_TO_IDLE,
         EXTENDED_COMMAND(0, EXTEND_EXTRA | IRREG_CFG_IN, 0xff),
         IDLE_TO_SHIFT_DR,
-        DATAW(0, 20), STATREQ,
+#endif
+        DATAW(0, 20), STATREQ, INT32(0),
 #else
         DATAW(0, 19), STATREQ,
              0x00, 0x00, 0x00,
@@ -992,8 +991,7 @@ logfile = stdout;
 #ifndef USE_FTDI_232H
                  JTAG_IRREG(DREAD, IRREG_ISC_NOOP),
 #else
-                 IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x14, TMSRW, 0x01, 0x01,
-//JTAG_IRREG
+                 IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x14, TMSRW, 0x01, 0x01, //JTAG_IRREG
 #endif
                  SEND_IMMEDIATE),
             NULL}))) != 0x4488)
@@ -1006,9 +1004,8 @@ logfile = stdout;
 #ifndef USE_FTDI_232H
          EXIT1_TO_IDLE, JTAG_IRREG(DREAD, IRREG_CFG_IN), 
 #else
-         EXIT1_TO_IDLE, DATAWBIT, 0x02, 0xff, SHIFT_TO_EXIT1(0, 0x80),
-         EXIT1_TO_IDLE, IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x05, TMSRW, 0x01, 0x01,
-//JTAG_IRREG
+         EXIT1_TO_IDLE, DATAWBIT, 0x02, 0xff, SHIFT_TO_EXIT1(0, 0x80), EXIT1_TO_IDLE, 
+         IDLE_TO_SHIFT_IR, DATARWBIT, 0x04, 0x05, TMSRW, 0x01, 0x01, //JTAG_IRREG
 #endif
              SEND_IMMEDIATE))) != 0x458a)
         printf("[%s:%d] mismatch %x\n", __FUNCTION__, __LINE__, ret16);
@@ -1049,12 +1046,9 @@ logfile = stdout;
         DITEM(
 #ifdef USE_FTDI_232H
               EXIT1_TO_IDLE,
-              SHIFT_TO_EXIT1(0, 0x80),
-              EXIT1_TO_IDLE,
-              IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0x3f, DATAWBIT, 0x02, 0xff,
-//JTAG_IRREG_EXTRA
-              SHIFT_TO_EXIT1(0, 0x80),
-              EXIT1_TO_IDLE,
+              SHIFT_TO_EXIT1(0, 0x80), EXIT1_TO_IDLE,
+              IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0x3f, DATAWBIT, 0x02, 0xff, //JTAG_IRREG_EXTRA
+              SHIFT_TO_EXIT1(0, 0x80), EXIT1_TO_IDLE,
 #endif
               IDLE_TO_RESET, IN_RESET_STATE, RESET_TO_IDLE,
 #ifndef USE_FTDI_232H
