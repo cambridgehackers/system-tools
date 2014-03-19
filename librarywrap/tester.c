@@ -498,29 +498,41 @@ static uint8_t *send_data_frame(struct ftdi_context *ftdi, uint8_t read_param, u
 #define RET_PATTERNB 0x12, 0x00, 0x04, 0x18, 0x06, 0x00
 #define RET_PATTERNC 0x12, 0x02, 0x00, 0x04, 0x01, 0x00
 
+static void clear_cortex(struct ftdi_context *ftdi)
+{
+    uint8_t *senddata = DITEM(
+          LOADIRDR(IRREGA_ABORT, 0, 0x08), /* Clear WDATAERR write data error flag */
+          LOADIRDR(IRREGA_DPACC, 0, 0x028000019aLL),
+          LOADIRDR(IRREGA_DPACC, 0, 0x03),
+          LOADDR_3_7,);
+    uint8_t *dresp = DITEM( RET_PATTERN1, RET_PATTERN1,);
+    WRITE_READ(__LINE__, senddata, dresp);
+}
 static void cortex_test(struct ftdi_context *ftdi, int count, int extra)
 {
 int i, j;
 uint8_t *senddata, *dresp;
 if (extra) {
 if (extra == 2) {
-    senddata = DITEM(
-            LOADIRDR(IRREGA_ABORT, 0, 0x08), /* Clear WDATAERR write data error flag */
-          LOADIRDR(IRREGA_DPACC, 0, 0x028000019aLL),
-          LOADIRDR(IRREGA_DPACC, 0, 0x03),
-          LOADDR_3_7,);
-    dresp = DITEM( RET_PATTERN1, RET_PATTERN1,);
-    WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x04), LOADIRDR(IRREGA_APACC, DREAD, 0x01), LOADIRDR_3_7(IRREGA_DPACC),);
+    clear_cortex(ftdi);
+    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x04),
+                     LOADIRDR(IRREGA_APACC, DREAD, 0x01),
+                     LOADIRDR_3_7(IRREGA_DPACC),);
     dresp = DITEM( RET_PATTERN3, RET_PATTERNC, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x08000004), LOADIRDR(IRREGA_APACC, DREAD, 0x01), LOADIRDR_3_7(IRREGA_DPACC),);
+    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x08000004),
+                     LOADIRDR(IRREGA_APACC, DREAD, 0x01),
+                     LOADIRDR_3_7(IRREGA_DPACC),);
     dresp = DITEM( RET_PATTERNA, RET_PATTERN2, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x04), LOADIRDR(IRREGA_APACC, DREAD, 0x10), LOADIRDR_3_7(IRREGA_DPACC));
+    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x04),
+                     LOADIRDR(IRREGA_APACC, DREAD, 0x10),
+                     LOADIRDR_3_7(IRREGA_DPACC));
     dresp = DITEM( RET_PATTERN3, RET_PATTERN2, RET_PATTERN1);
     WRITE_READ(__LINE__, senddata, dresp);
-    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x08000004), LOADIRDR(IRREGA_APACC, DREAD, 0x8400000010LL), LOADIRDR_3_7(IRREGA_DPACC));
+    senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x08000004),
+                     LOADIRDR(IRREGA_APACC, DREAD, 0x8400000010LL),
+                     LOADIRDR_3_7(IRREGA_DPACC));
     dresp = DITEM( RET_PATTERNA, RET_PATTERN2, RET_PATTERN1);
     WRITE_READ(__LINE__, senddata, dresp);
     senddata = DITEM(
@@ -538,7 +550,8 @@ if (extra == 2) {
           LOADDR(DREAD, 0x8400480442LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400480142LL), LOADDR(DREAD, 0x07),
           LOADIRDR_3_7(IRREGA_DPACC));
-    dresp = DITEM( RET_PATTERNA, RET_PATTERN8, RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5, RET_PATTERN4, RET_PATTERN4, RET_PATTERN3, RET_PATTERN1,);
+    dresp = DITEM( RET_PATTERNA, RET_PATTERN8, RET_PATTERN7, RET_PATTERN7,
+             RET_PATTERN5, RET_PATTERN5, RET_PATTERN4, RET_PATTERN4, RET_PATTERN3, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
     uint8_t senddata33[] = {
           LOADIRDR(IRREGA_APACC, 0, 0x8400480442LL),
@@ -549,7 +562,9 @@ if (extra == 2) {
           LOADDR(DREAD, 0x8400490442LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400490142LL), LOADDR(DREAD, 0x07),
           LOADIRDR_3_7(IRREGA_DPACC)};
-    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5, RET_PATTERN4, RET_PATTERN4, RET_PATTERN3, RET_PATTERN1,);
+    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3,
+             RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5,
+             RET_PATTERN4, RET_PATTERN4, RET_PATTERN3, RET_PATTERN1,);
     write_data(ftdi, senddata33, sizeof(senddata33));
     check_read_data(__LINE__, ftdi, dresp);
     senddata = DITEM(
@@ -559,7 +574,8 @@ if (extra == 2) {
           LOADDR(DREAD, 0x84004818a2LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400480442LL), LOADDR(DREAD, 0x07),
           LOADIRDR_3_7(IRREGA_DPACC));
-    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN5, RET_PATTERN5, RET_PATTERN4, RET_PATTERN1,);
+    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3,
+              RET_PATTERN5, RET_PATTERN5, RET_PATTERN4, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
     senddata = DITEM(
           LOADIRDR(IRREGA_APACC, 0, 0x8400480422LL), LOADDR(DREAD, 0x07),
@@ -584,21 +600,25 @@ if (extra == 2) {
           DATARWBIT, 0x06, 0x00,
           SHIFT_TO_UPDATE_TO_IDLE(DREAD, 0),
           SEND_IMMEDIATE);
-    dresp = DITEM( 0x93, 0x70, 0x72, 0x03, 0x77, 0x04, 0xa0, 0x4b, INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), 0x00,);
+    dresp = DITEM( 0x93, 0x70, 0x72, 0x03, 0x77, 0x04, 0xa0, 0x4b,
+             INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff),
+             INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff),
+             INT32(0xff), INT32(0xff), INT32(0xff), INT32(0xff),
+             0x00,);
     WRITE_READ(__LINE__, senddata, dresp);
     for (i = 0; i < 3; i++) {
         senddata = DITEM(
           TEMPLOADIR(IRREGA_BYPASS), SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_DR, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0), SEND_IMMEDIATE);
-        dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
+        dresp = DITEM( INT32(0),);
         WRITE_READ(__LINE__, senddata, dresp);
         senddata = DITEM(
           TEMPLOADIR(IRREGA_BYPASS), SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_IR, DATAWBIT, 0x05, 0xc3, DATAWBIT, 0x02, 0xff, SHIFT_TO_UPDATE_TO_IDLE(0, 0x80),
           IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
           SEND_IMMEDIATE);
-        dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
+        dresp = DITEM( INT32(0),);
         WRITE_READ(__LINE__, senddata, dresp);
         for (j = 0; j < 2; j++) {
             senddata = DITEM(
@@ -607,18 +627,12 @@ if (extra == 2) {
               IDLE_TO_SHIFT_DR, DATAWBIT, 0x05, 0x0c, SHIFT_TO_UPDATE_TO_IDLE(0, 0),
               IDLE_TO_SHIFT_DR, DATAW(0, 1), 0x69, DATAWBIT, 0x01, 0x00, DATAWBIT, 0x00, 0x00, DATAR(4), SHIFT_TO_UPDATE_TO_IDLE(0, 0),
               SEND_IMMEDIATE);
-            dresp = DITEM( 0x00, 0x00, 0x00, 0x00,);
+            dresp = DITEM( INT32(0),);
             WRITE_READ(__LINE__, senddata, dresp);
         }
     }
 }
-    senddata = DITEM(
-           LOADIRDR(IRREGA_ABORT, 0, 0x08), /* Clear WDATAERR write data error flag */
-           LOADIRDR(IRREGA_DPACC, 0, 0x028000019aLL),
-           LOADIRDR(IRREGA_DPACC, 0, 0x03),
-           LOADDR_3_7,);
-    dresp = DITEM( RET_PATTERN1, RET_PATTERN1,);
-    WRITE_READ(__LINE__, senddata, dresp);
+    clear_cortex(ftdi);
     senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x04), LOADIRDR(IRREGA_APACC, DREAD, 0x01), LOADIRDR_3_7(IRREGA_DPACC),);
     dresp = DITEM( RET_PATTERN3, RET_PATTERNC, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
@@ -627,13 +641,7 @@ if (extra == 2) {
     WRITE_READ(__LINE__, senddata, dresp);
 }
 else {
-    senddata = DITEM(
-           LOADIRDR(IRREGA_ABORT, 0, 0x08), /* Clear WDATAERR write data error flag */
-           LOADIRDR(IRREGA_DPACC, 0, 0x028000019aLL),
-           LOADIRDR(IRREGA_DPACC, 0, 0x03),
-           LOADDR_3_7,);
-    dresp = DITEM( RET_PATTERN1, RET_PATTERN1,);
-    WRITE_READ(__LINE__, senddata, dresp);
+    clear_cortex(ftdi);
 //01
     senddata = DITEM( LOADIRDR(IRREGA_DPACC, 0, 0x04), LOADIRDR(IRREGA_APACC, DREAD, 0x01), RESET_TO_IDLE, TMS_WAIT, TMSW, 0x03, 0x00, LOADIRDR_3_7(IRREGA_DPACC),);
     dresp = DITEM( RET_PATTERN3, 0x12, 0x02, 0x00, 0x1c, 0x87, 0x10, RET_PATTERN1);
@@ -684,7 +692,9 @@ WRITE_READ(__LINE__, senddata, dresp);
            LOADDR(DREAD, 0x8400490442LL), LOADDR(DREAD, 0x07),
            LOADDR(DREAD, 0x8400490142LL), LOADDR(DREAD, 0x07),
            LOADIRDR_3_7(IRREGA_DPACC),};
-    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5, RET_PATTERNB, RET_PATTERNB, RET_PATTERN3, RET_PATTERN1,);
+    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3,
+             RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5,
+             RET_PATTERNB, RET_PATTERNB, RET_PATTERN3, RET_PATTERN1,);
     write_data(ftdi, senddata23, sizeof(senddata23));
     check_read_data(__LINE__, ftdi, dresp);
 }
@@ -744,7 +754,9 @@ WRITE_READ(__LINE__, senddata, dresp);
           LOADDR(DREAD, 0x8400490442LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400490142LL), LOADDR(DREAD, 0x07),
           LOADIRDR_3_7(IRREGA_DPACC)};
-    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5, RET_PATTERN4, RET_PATTERN4, RET_PATTERN3, RET_PATTERN1);
+    dresp = DITEM( RET_PATTERN3, RET_PATTERN3, RET_PATTERN3, RET_PATTERN3,
+             RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5,
+             RET_PATTERN4, RET_PATTERN4, RET_PATTERN3, RET_PATTERN1);
     write_data(ftdi, senddata17, sizeof(senddata17));
     check_read_data(__LINE__, ftdi, dresp);
     uint8_t senddata18[] = {
