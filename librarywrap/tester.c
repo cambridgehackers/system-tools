@@ -72,7 +72,8 @@ static void openlogfile(void)
 }
 #include "dumpdata.h"
 #ifdef USE_LIBFTDI
-#include "ftdi_reference.h"
+//#include "ftdi_reference.h"
+#include "ftdi.h"
 #else
 #define MPSSE_WRITE_NEG 0x01   /* Write TDI/DO on negative TCK/SK edge*/
 #define MPSSE_BITMODE   0x02   /* Write bits, not bytes */
@@ -98,7 +99,6 @@ static unsigned char usbreadbuffer[USB_CHUNKSIZE];
 #define ftdi_transfer_data_done(A) (void)(A)
 #define ftdi_set_usbdev(A,B)
 #define ftdi_write_data_submit(A, B, C) (ftdi_write_data((A), (B), (C)), NULL)
-#define ftdi_read_data_submit(A, B, C) (ftdi_read_data((A), (B), (C)), NULL)
 static int ftdi_write_data(struct ftdi_context *ftdi, const unsigned char *buf, int size)
 {
     int actual_length;
@@ -555,8 +555,7 @@ if (extra == 2) {
     WRITE_READ(__LINE__, senddata, dresp);
     uint8_t senddata33[] = {
           LOADIRDR(IRREGA_APACC, 0, 0x8400480442LL),
-          LOADDR(DREAD, 0x18060016),
-          LOADDR(DREAD, 0x18860016),
+          LOADDR(DREAD, 0x18060016), LOADDR(DREAD, 0x18860016),
           LOADDR(DREAD, 0x8400490002LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x84004918a2LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400490442LL), LOADDR(DREAD, 0x07),
@@ -569,8 +568,7 @@ if (extra == 2) {
     check_read_data(__LINE__, ftdi, dresp);
     senddata = DITEM(
           LOADIRDR(IRREGA_APACC, 0, 0x8400490442LL),
-          LOADDR(DREAD, 0x18060016),
-          LOADDR(DREAD, 0x18860016),
+          LOADDR(DREAD, 0x18060016), LOADDR(DREAD, 0x18860016),
           LOADDR(DREAD, 0x84004818a2LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400480442LL), LOADDR(DREAD, 0x07),
           LOADIRDR_3_7(IRREGA_DPACC));
@@ -681,29 +679,22 @@ WRITE_READ(__LINE__, senddata, dresp);
     WRITE_READ(__LINE__, senddata, dresp);
     senddata = DITEM(
            LOADIR(IRREGA_APACC),
-           LOADDR(0, 0x87c0038402LL),
-           LOADDR(DREAD, 0x07),
-           RESET_TO_IDLE, TMSW, 0x01, 0x00,
+           LOADDR(0, 0x87c0038402LL), LOADDR(DREAD, 0x07), RESET_TO_IDLE, TMSW, 0x01, 0x00,
            LOADIRDR_3_7(IRREGA_DPACC),);
     dresp = DITEM( RET_PATTERN8, RET_PATTERN3, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
     senddata = DITEM(
            LOADIRDR(IRREGA_DPACC, 0, 0x08000004),
-           LOADIRDR(IRREGA_APACC, DREAD, 0x8400480002LL),
-                      LOADDR(DREAD, 0x07),
-           LOADDR(DREAD, 0x84004818a2LL),
-                      LOADDR(DREAD, 0x07),
-           LOADDR(DREAD, 0x8400480442LL),
-                      LOADDR(DREAD, 0x07),
-           LOADDR(DREAD, 0x8400480142LL),
-                      LOADDR(DREAD, 0x07),
+           LOADIRDR(IRREGA_APACC, DREAD, 0x8400480002LL), LOADDR(DREAD, 0x07),
+           LOADDR(DREAD, 0x84004818a2LL), LOADDR(DREAD, 0x07),
+           LOADDR(DREAD, 0x8400480442LL), LOADDR(DREAD, 0x07),
+           LOADDR(DREAD, 0x8400480142LL), LOADDR(DREAD, 0x07),
            LOADIRDR_3_7(IRREGA_DPACC),);
     dresp = DITEM( RET_PATTERNA, RET_PATTERN3, RET_PATTERN7, RET_PATTERN7, RET_PATTERN5, RET_PATTERN5, RET_PATTERNB, RET_PATTERNB, RET_PATTERN3, RET_PATTERN1,);
     WRITE_READ(__LINE__, senddata, dresp);
     static uint8_t senddata23[] = {
            LOADIRDR(IRREGA_APACC, 0, 0x8400480442LL),
-           LOADDR(DREAD, 0x18060016),
-           LOADDR(DREAD, 0x18860016),
+           LOADDR(DREAD, 0x18060016), LOADDR(DREAD, 0x18860016),
            LOADDR(DREAD, 0x8400490002LL), LOADDR(DREAD, 0x07),
            LOADDR(DREAD, 0x84004918a2LL), LOADDR(DREAD, 0x07),
            LOADDR(DREAD, 0x8400490442LL), LOADDR(DREAD, 0x07),
@@ -720,8 +711,7 @@ WRITE_READ(__LINE__, senddata, dresp);
                      LOADIRDR(IRREGA_ABORT, 0, 0x08), /* Clear WDATAERR write data error flag */
                      LOADIRDR(IRREGA_DPACC, 0, 0x028000019aLL),
                      LOADIRDR(IRREGA_APACC, 0, 0x8400490442LL),
-                     LOADDR(DREAD, 0x18060016),
-                     LOADDR(DREAD, 0x18860016),
+                     LOADDR(DREAD, 0x18060016), LOADDR(DREAD, 0x18860016),
                      LOADIRDR(IRREGA_DPACC, DREAD, 0x03), LOADDR_3_7);
             dresp = DITEM( RET_PATTERNA, RET_PATTERN2, RET_PATTERN1);
             WRITE_READ(__LINE__, senddata, dresp);
@@ -767,7 +757,7 @@ WRITE_READ(__LINE__, senddata, dresp);
     check_read_data(__LINE__, ftdi, dresp);
     uint8_t senddata17[] = {
             LOADIRDR(IRREGA_APACC, 0, 0x8400480442LL),
-          LOADDR(DREAD, 0x18060016),    LOADDR(DREAD, 0x18860016),
+          LOADDR(DREAD, 0x18060016), LOADDR(DREAD, 0x18860016),
           LOADDR(DREAD, 0x8400490002LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x84004918a2LL), LOADDR(DREAD, 0x07),
           LOADDR(DREAD, 0x8400490442LL), LOADDR(DREAD, 0x07),
@@ -780,8 +770,7 @@ WRITE_READ(__LINE__, senddata, dresp);
     check_read_data(__LINE__, ftdi, dresp);
     uint8_t senddata18[] = {
                      LOADIRDR(IRREGA_APACC, 0, 0x8400490442LL),
-                     LOADDR(DREAD, 0x18060016),
-                     LOADDR(DREAD, 0x18860016),
+                     LOADDR(DREAD, 0x18060016), LOADDR(DREAD, 0x18860016),
                      LOADDR(DREAD, 0x84004818a2LL), LOADDR(DREAD, 0x07),
                      LOADDR(DREAD, 0x8400480442LL), LOADDR(DREAD, 0x07),
                      LOADIRDR_3_7(IRREGA_DPACC)};
@@ -1189,7 +1178,7 @@ logfile = stdout;
     const char *serialno = NULL;
 
     if (argc < 2) {
-        printf("tester <filename>\n");
+        printf("%s: [ -s <serialno> ] <filename>\n", argv[0]);
         exit(1);
     }
     if (!strcmp(argv[i], "-s")) {

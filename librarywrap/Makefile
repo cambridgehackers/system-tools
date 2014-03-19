@@ -8,10 +8,9 @@ FTLIB=/home/jca/git/system-tools/librarywrap/libftdi1-1.1/build/src/libftdi1.so.
 	gcc -fPIC -shared $(CFLAGS) $< /lib/x86_64-linux-gnu/libdl-2.15.so -o $@
 #/usr/lib32/libdl.a -o $@
 
-#tester.o: jcaftdi.c tester.c Makefile
-
 tester: tester.o ftdiwrap.o Makefile
-	gcc -g -o tester tester.o ftdiwrap.o -ldl -lpthread -lusb-1.0
+	#gcc -g -o tester tester.o ftdiwrap.o -ldl -lpthread -lusb-1.0
+	gcc -g -o tester tester.o -lpthread -lusb-1.0
 
 trace:
 	set -x
