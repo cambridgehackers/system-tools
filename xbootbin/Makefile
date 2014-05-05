@@ -1,8 +1,8 @@
 
-all: xbootbin_run xbootgen_run
+all: dumpbootbin_run xbootgen_run
 
-xbootbin_run:
-	gcc -g -o xbootbin xbootbin.c
+dumpbootbin_run:
+	gcc -g -o dumpbootbin dumpbootbin.c
 
 xbootgen_run:
 	arm-none-linux-gnueabi-gcc -c reserved_for_interrupts.S
