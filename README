@@ -14,6 +14,9 @@ pci
   The file pci-config.c was downloaded 2014-05-30 09:29:47EDT from:
    http://ftp.psu.ac.th/pub/scyld/pci-config.c
 
+  Other References:
+     http://www.pcisig.com/developers/main/training_materials/get_document?doc_id=c63e52068ad02312b0e15e90d84aba82000c2f0c
+
 
 ----------------------------------------------------------------------
 Other useful tools:

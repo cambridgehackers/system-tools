@@ -1,4 +1,4 @@
 #
-sudo lspci -vv -d 8086:0c01
-# | grep NegoPending
+set -x
+sudo lspci -vv -d 8086:0c01 | grep NegoPending
 

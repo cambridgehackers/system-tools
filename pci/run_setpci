@@ -1,7 +1,7 @@
 #
 set -x
 setpci --dumpregs
-setpci -d 8086:0c01 BRIDGE_CONTROL=0x50
-setpci -d 8086:0c01 BRIDGE_CONTROL=0x10
+sudo setpci -d 8086:0c01 BRIDGE_CONTROL=0x50
+sudo setpci -d 8086:0c01 BRIDGE_CONTROL=0x10
 setpci -d 8086:0c01 BRIDGE_CONTROL
 setpci --help
