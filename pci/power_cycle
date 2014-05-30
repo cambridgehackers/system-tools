@@ -1,0 +1,5 @@
+sudo ./pci-config -u
+sudo ./pci-config -a
+sudo ./pci-config -#2 -S
+sleep 1
+sudo ./pci-config -#2 -W

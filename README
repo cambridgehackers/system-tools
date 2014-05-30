@@ -9,6 +9,11 @@ elfdump
  http://www.tachyonsoft.com/downloads/elfdump_linux.tar.gz
  (also referenced from http://www.tachyonsoft.com/elf.html)
 
+pci
+==========
+  The file pci-config.c was downloaded 2014-05-30 09:29:47EDT from:
+   http://ftp.psu.ac.th/pub/scyld/pci-config.c
+
 
 ----------------------------------------------------------------------
 Other useful tools:
