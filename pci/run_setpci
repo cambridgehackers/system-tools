@@ -4,4 +4,18 @@ setpci --dumpregs
 sudo setpci -d 8086:0c01 BRIDGE_CONTROL=0x50
 sudo setpci -d 8086:0c01 BRIDGE_CONTROL=0x10
 setpci -d 8086:0c01 BRIDGE_CONTROL
+
+sudo setpci -d 8086:0c01 0xc8.w
+#6000
+#DevCtl2: LTR+
+sudo setpci -d 8086:0c01 0xc8.w=0x6400
+
+sudo setpci -d 8086:0c01 0xaa.w
+#0001
+#DevSta: CorrErr-
+sudo setpci -d 8086:0c01 0xaa.w=1
+sudo setpci -d 8086:0c01 0xba.w
+#0048
+#Changed: PresDet-
+setpci -d 8086:0c01 0xba.w=0x48
 setpci --help
