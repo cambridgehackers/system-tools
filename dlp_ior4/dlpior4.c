@@ -184,6 +184,13 @@ error:
     printf("Error opening usb interface\n");
     exit(-1);
 }
+static uint8_t buf[100];
+void write_char(uint8_t p)
+{
+printf("[%s:%d] bef %x\n", __FUNCTION__, __LINE__, p);
+int len = usb_write_data(&p, 1);
+printf("[%s:%d] aft len %d\n", __FUNCTION__, __LINE__, len);
+}
 
 int main(int argc, char **argv)
 {
@@ -235,17 +242,33 @@ int main(int argc, char **argv)
             break;
         usb_index++;
     }
-    if (optind != argc - 1) {
-usage:
-        printf("%s: [ -l ] [ -t ] [ -s <serialno> ] [ -r ] <filename>\n", argv[0]);
-        exit(1);
-    }
 
     /*
      * Set JTAG clock speed and GPIO pins for our i/f
      */
     usb_open(usb_index);          /*** Generic initialization of FTDI chip ***/
+write_char('1'); // switch 1 -> A
+sleep(1);
+write_char('Q'); // switch 1 -> B
+sleep(1);
+write_char('2'); // switch 2 -> A
+sleep(1);
+write_char('W'); // switch 2 -> B
+sleep(1);
+write_char('3'); // switch 3 -> A
+sleep(1);
+write_char('E'); // switch 3 -> B
+sleep(1);
+write_char('4'); // switch 4 -> A
+sleep(1);
+write_char('R'); // switch 4 -> B
 
+sleep(1);
+write_char('\''); // ping
+
+int rc = usb_read_data(buf,sizeof(buf));
+
+printf("[%s:%d] rc %x buf[0] %x\n", __FUNCTION__, __LINE__, rc, buf[0]);
     /*
      * Cleanup and free USB device
      */
@@ -254,4 +277,7 @@ usage:
     libusb_exit(usb_context);
     execlp("/usr/local/bin/pciescanportal", "arg", (char *)NULL); /* rescan pci bus to discover device */
     return 0;
+usage:
+    printf("%s: [ -l ] [ -t ] [ -s <serialno> ] [ -r ] <filename>\n", argv[0]);
+    exit(1);
 }
