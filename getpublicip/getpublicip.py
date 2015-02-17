@@ -21,6 +21,17 @@
 ## CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
+#more info at: http://serverfault.com/questions/89114/finding-the-public-ip-address-in-a-shell-script
+#
+# ident.me
+# o-o.myaddr.l.google.com
+# whoami.akamai.net
+# checkmyip.com
+# icanhazip.com
+# myip.opendns.com
+# https://shtuff.it/myip/short
+# stunserver.org
+
 #url = "http://ifconfig.me/ip"
 #url = "http://www.whatismyip.com"
 url = "http://ip.alt.io"
