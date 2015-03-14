@@ -445,6 +445,7 @@ static int iLoadElfFile(
     if (pszMsg == NULL) {
         switch (pElfFile->Ehdr.e_ident[EI_CLASS]) {
           case ELFCLASS32:
+printf("[%s:%d]32\n", __FUNCTION__, __LINE__);
             switch(pElfFile->Ehdr.e_machine) {
               case EM_386:
                 if (pElfFile->Ehdr.e_ident[EI_DATA] != ELFDATALSB)
@@ -459,6 +460,7 @@ static int iLoadElfFile(
             }
             break;
           case ELFCLASS64:
+printf("[%s:%d]64\n", __FUNCTION__, __LINE__);
             if ((pElfFile->Ehdr.e_machine != EM_S390) ||
                 (pElfFile->Ehdr.e_ident[EI_DATA] != ELFDATAMSB))
                 pszMsg = "Invalid S/390 64-bit ELF file";
